@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local runtime/config
+config.json
+.env
+*.env
+*.key
+*secret*
+auth.json
+credentials*
+
+# Hermes/Codex runtime state
+agent_queue/
+agent_tasks/
+agent_sessions/
+worktrees/
+worktree_archives/
+codex_home/
+.hermes/
+.codex/
+.omx/
+
+# Editors/OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
