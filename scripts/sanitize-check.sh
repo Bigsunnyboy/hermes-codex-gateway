@@ -34,7 +34,7 @@ if rg -n --hidden --glob '!.git/**' \
 fi
 
 if rg -n --hidden --glob '!.git/**' --glob '!tests/**' --glob '!scripts/sanitize-check.sh' \
-  '/root/|/mnt/[a-zA-Z]/|Bigsunnyboy|data-agent|hermes-write-smoke' .; then
+  '/root/|/mnt/[a-zA-Z]/|data-agent|hermes-write-smoke' .; then
   fail "local machine path or private project marker matched outside tests"
 fi
 

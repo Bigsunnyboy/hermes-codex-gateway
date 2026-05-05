@@ -1,13 +1,57 @@
 # Hermes Codex Gateway
 
-Hermes Codex Gateway is an opt-in Hermes Agent plugin for governed local Codex
-execution from messaging platforms, especially Feishu/Lark.
+[![Release](https://img.shields.io/github/v/release/Bigsunnyboy/hermes-codex-gateway?include_prereleases)](https://github.com/Bigsunnyboy/hermes-codex-gateway/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
+
+Run governed local Codex tasks from Feishu/Lark through Hermes Agent.
+
+Hermes Codex Gateway is an opt-in Hermes Agent plugin for teams that want chat
+operators to start local Codex work without giving up approval gates, worktree
+isolation, path allowlists, verification commands, and auditable artifacts.
 
 It turns a Feishu `/codex ...` command into an auditable background task:
 
 ```text
 Feishu /codex -> Hermes plugin hook -> queue -> cron wake gate -> isolated git worktree -> codex exec -> verify -> Feishu result/card update
 ```
+
+## Quick Start
+
+```bash
+hermes plugins install Bigsunnyboy/hermes-codex-gateway
+hermes plugins enable hermes-codex-gateway
+systemctl restart hermes-gateway.service
+```
+
+Create a config from the example:
+
+```bash
+cp ~/.hermes/plugins/hermes-codex-gateway/config.example.json \
+  ~/.hermes/plugins/hermes-codex-gateway/config.json
+```
+
+Then try a read-only task from Feishu/Lark:
+
+```text
+/codex repo=example mode=read workspace=first-read
+Summarize the project structure. Do not modify files.
+```
+
+For a 90-second walkthrough script, see [docs/demo.md](docs/demo.md).
+
+## Why This Exists
+
+Running an agent from chat is useful, but write-capable local automation needs
+guardrails. This plugin keeps Codex-specific behavior outside Hermes core while
+providing a practical operator workflow:
+
+- Feishu/Lark remains the chat control plane.
+- Hermes Agent owns plugin loading, gateway dispatch, and cron wakeups.
+- Codex executes inside isolated worktrees.
+- Write tasks require approval and can be constrained by `allow=...`.
+- `verify=...` commands run before success is reported.
+- Artifacts are captured for audit and follow-up.
 
 ## What It Provides
 
@@ -39,10 +83,8 @@ card lifecycle is reduced.
 
 ## Install
 
-From GitHub once this repository is published:
-
 ```bash
-hermes plugins install <owner>/hermes-codex-gateway
+hermes plugins install Bigsunnyboy/hermes-codex-gateway
 hermes plugins enable hermes-codex-gateway
 systemctl restart hermes-gateway.service
 ```
@@ -143,7 +185,7 @@ scripts/sanitize-check.sh
 Run the official Docker install smoke test before tagging a release:
 
 ```bash
-scripts/docker-official-smoke.sh https://github.com/<owner>/hermes-codex-gateway.git
+scripts/docker-official-smoke.sh https://github.com/Bigsunnyboy/hermes-codex-gateway.git
 ```
 
 For local pre-publish validation, pass the repository path:
