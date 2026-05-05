@@ -340,6 +340,14 @@ def _feishu_card_action_response_hook(**kwargs):
     )
 
 
+def _hook_supported(hook_name: str) -> bool:
+    try:
+        from hermes_cli.plugins import VALID_HOOKS
+    except Exception:
+        return True
+    return hook_name in VALID_HOOKS
+
+
 def register(ctx) -> None:
     ctx.register_tool(
         name="create_codex_task",
@@ -406,4 +414,5 @@ def register(ctx) -> None:
         emoji="🧹",
     )
     ctx.register_hook("pre_gateway_dispatch", _pre_gateway_dispatch_hook)
-    ctx.register_hook("feishu_card_action_response", _feishu_card_action_response_hook)
+    if _hook_supported("feishu_card_action_response"):
+        ctx.register_hook("feishu_card_action_response", _feishu_card_action_response_hook)

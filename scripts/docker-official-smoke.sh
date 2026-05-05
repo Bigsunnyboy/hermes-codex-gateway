@@ -27,16 +27,25 @@ docker_args=(
 )
 
 install_source="$PLUGIN_SOURCE"
+local_file_source=0
 if [[ "$PLUGIN_SOURCE" == "$repo_root" || "$PLUGIN_SOURCE" == "file://$repo_root" ]]; then
   docker_args+=(-v "$repo_root:/plugin-src:ro")
   install_source="file:///plugin-src"
+  local_file_source=1
 fi
 
 echo "Using image: $IMAGE"
 echo "Using plugin source: $install_source"
 
-docker run "${docker_args[@]}" "$IMAGE" \
-  plugins install "$install_source" --enable
+if [[ "$local_file_source" == "1" ]]; then
+  docker run "${docker_args[@]}" "$IMAGE" \
+    bash -lc 'git config --global --add safe.directory /plugin-src &&
+      git config --global --add safe.directory /plugin-src/.git &&
+      /opt/hermes/.venv/bin/hermes plugins install file:///plugin-src --enable'
+else
+  docker run "${docker_args[@]}" "$IMAGE" \
+    plugins install "$install_source" --enable
+fi
 
 docker run "${docker_args[@]}" "$IMAGE" \
   plugins list | tee "$workdir/plugins-list.txt"
@@ -47,7 +56,7 @@ grep -qi "enabled" "$workdir/plugins-list.txt"
 docker run "${docker_args[@]}" "$IMAGE" \
   bash -lc '
 set -euo pipefail
-python - <<'"'"'PY'"'"'
+/opt/hermes/.venv/bin/python - <<'"'"'PY'"'"'
 from hermes_cli.plugins import discover_plugins, get_plugin_manager
 from tools.registry import registry
 

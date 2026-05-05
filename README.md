@@ -140,6 +140,18 @@ Run the repository hygiene check before publishing:
 scripts/sanitize-check.sh
 ```
 
+Run the official Docker install smoke test before tagging a release:
+
+```bash
+scripts/docker-official-smoke.sh https://github.com/<owner>/hermes-codex-gateway.git
+```
+
+For local pre-publish validation, pass the repository path:
+
+```bash
+scripts/docker-official-smoke.sh /path/to/hermes-codex-gateway
+```
+
 ## Publishing Notes
 
 This repository is designed as an external plugin, not as a bundled Hermes

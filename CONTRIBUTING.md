@@ -17,6 +17,12 @@ Run the repository hygiene check before committing:
 scripts/sanitize-check.sh
 ```
 
+Run the official Docker install smoke test before release candidates:
+
+```bash
+scripts/docker-official-smoke.sh /path/to/hermes-codex-gateway
+```
+
 ## Repository Rules
 
 - Do not commit `config.json`, `.env`, Codex auth files, Feishu credentials,
