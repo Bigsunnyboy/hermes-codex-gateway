@@ -8,7 +8,7 @@ from typing import Any, Callable
 from .config import GatewayConfig
 from .delivery import CardUpdater, deliver_task_result, AdapterSender, update_task_lifecycle_card
 from .queue import FileTaskQueue
-from .runners.codex import CodexCliRunner
+from .runners.registry import get_runner_definition
 from .task_service import Runner, create_agent_task
 
 
@@ -66,11 +66,8 @@ def run_next_queue_task(
 
     try:
         payload = record["payload"]
-        actual_runner = runner or CodexCliRunner(
-            codex_executable=cfg.codex_executable,
-            extra_env=cfg.codex_env or {},
-            max_output_bytes=cfg.max_output_bytes,
-        )
+        runner_definition = get_runner_definition(str(payload.get("runner") or ""))
+        actual_runner = runner or runner_definition.create_runner(cfg)
         result = create_agent_task(
             cfg,
             runner=actual_runner,

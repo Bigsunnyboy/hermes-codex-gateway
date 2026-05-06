@@ -3,6 +3,8 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass, field
 
+from .runners.registry import get_runner_definition, normalize_runner_id
+
 
 @dataclass(frozen=True)
 class AgentCommand:
@@ -46,11 +48,10 @@ def parse_agent_command(text: str) -> AgentCommand:
 
     verify_commands = _split_csv(options.get("verify", ""))
     allowed_paths = _split_csv(options.get("allow", "") or options.get("allowed", ""))
-    runner = str(options.get("runner") or "").strip().lower()
+    runner = normalize_runner_id(options.get("runner") or "")
     if not runner:
         raise ValueError("runner is required for /agent commands.")
-    if runner != "codex":
-        raise ValueError("unsupported runner: " + runner)
+    get_runner_definition(runner)
     return AgentCommand(
         runner=runner,
         repo=options.get("repo"),

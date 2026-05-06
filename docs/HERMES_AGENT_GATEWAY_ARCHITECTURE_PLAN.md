@@ -46,8 +46,9 @@ User / External System / Automation Trigger
    future coding agents.
 
 4. A2A is an adapter, not the rewrite reason.
-   The gateway can be A2A-style now, implement a minimum A2A adapter later, and
-   support streaming/subscribe after the core contracts stabilize.
+   The gateway should be A2A-capable in direction only for now. It should
+   implement a minimum A2A adapter later, and support streaming/subscribe after
+   the core contracts stabilize.
 
 5. Governance is the stable center.
    Queueing, policy, approval, worktree isolation, changed-path allowlists,
@@ -395,11 +396,6 @@ Examples:
 ```text
 /agent runner=codex repo=example-repo mode=read workspace=inspect-001
 Summarize the runtime architecture. Do not modify files.
-```
-
-```text
-/agent runner=claude-code repo=example-repo mode=write workspace=fix-001 allow=app/service/foo.py verify="uv run pytest tests/test_foo.py"
-Fix the failing foo service test.
 ```
 
 Approval and status:

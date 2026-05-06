@@ -12,7 +12,7 @@ try:
     from .hermes_agent_gateway.policy import resolve_target
     from .hermes_agent_gateway.queue import FileTaskQueue
     from .hermes_agent_gateway.risk_policy import assess_task_risk
-    from .hermes_agent_gateway.runners.codex import CodexCliRunner
+    from .hermes_agent_gateway.runners.registry import get_runner_definition
     from .hermes_agent_gateway.scheduler import ensure_worker_cron_job, run_next_queue_task
     from .hermes_agent_gateway.task_service import create_agent_task
     from .hermes_agent_gateway.verify_templates import expand_verify_templates
@@ -35,7 +35,7 @@ except ImportError:
     from hermes_agent_gateway.policy import resolve_target
     from hermes_agent_gateway.queue import FileTaskQueue
     from hermes_agent_gateway.risk_policy import assess_task_risk
-    from hermes_agent_gateway.runners.codex import CodexCliRunner
+    from hermes_agent_gateway.runners.registry import get_runner_definition
     from hermes_agent_gateway.scheduler import ensure_worker_cron_job, run_next_queue_task
     from hermes_agent_gateway.task_service import create_agent_task
     from hermes_agent_gateway.verify_templates import expand_verify_templates
@@ -56,7 +56,7 @@ CREATE_AGENT_TASK_SCHEMA = {
         "properties": {
             "runner": {
                 "type": "string",
-                "description": "Required runner id. The first supported value is codex.",
+                "description": "Required enabled runner id. Current enabled runner: codex.",
             },
             "repo": {
                 "type": "string",
@@ -172,16 +172,10 @@ MANAGE_AGENT_WORKSPACE_SCHEMA = {
 }
 
 
-def _runner_from_args(args: dict) -> CodexCliRunner:
-    runner_name = str(args.get("runner") or "").strip().lower()
-    if runner_name != "codex":
-        raise ValueError("runner is required and must be one of: codex")
+def _runner_from_args(args: dict):
+    runner_definition = get_runner_definition(str(args.get("runner") or ""))
     cfg = load_config()
-    return CodexCliRunner(
-        codex_executable=cfg.codex_executable,
-        extra_env=cfg.codex_env or {},
-        max_output_bytes=cfg.max_output_bytes,
-    )
+    return runner_definition.create_runner(cfg)
 
 
 def _handle_create_agent_task(args: dict, **_: object) -> str:

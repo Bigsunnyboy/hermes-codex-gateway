@@ -8,6 +8,7 @@ from .artifacts import capture_git, create_artifact_dir, new_task_id, workspace_
 from .config import GatewayConfig
 from .policy import resolve_target
 from .risk_policy import assess_task_risk
+from .runners.registry import get_runner_definition, normalize_runner_id
 from .sessions import load_workspace_session, save_workspace_session
 from .verify import run_verify_commands
 from .verify_templates import expand_verify_templates
@@ -43,9 +44,8 @@ def create_agent_task(
     verify_commands: list[str] | None = None,
     allowed_paths: list[str] | None = None,
 ) -> dict[str, Any]:
-    runner_name = str(runner_name or "").strip().lower()
-    if runner_name != "codex":
-        raise ValueError("runner is required and must be one of: codex")
+    runner_name = normalize_runner_id(runner_name)
+    get_runner_definition(runner_name)
     if not prompt.strip():
         raise ValueError("prompt is required")
     verify_commands = expand_verify_templates(verify_commands)

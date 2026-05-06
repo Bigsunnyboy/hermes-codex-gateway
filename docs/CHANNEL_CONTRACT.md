@@ -1,8 +1,9 @@
 # Channel Contract
 
-Hermes Agent Gateway treats Feishu/Lark as one channel adapter, not as Gateway
-Core. A channel adapter converts platform events into neutral gateway commands
-and converts gateway notifications back into platform-specific messages.
+Hermes Agent Gateway treats Feishu/Lark as the current channel adapter, not as
+Gateway Core or the only intended platform. A channel adapter converts platform
+events into neutral gateway commands and converts gateway notifications back
+into platform-specific messages.
 
 ## Inbound Command Shape
 
@@ -48,7 +49,7 @@ Notification text and cards use agent-generic labels:
 - agent task done;
 - agent task failed.
 
-## Non-Goals For Phase 1
+## Non-Goals For The Current Channel Phase
 
 - No Slack, Telegram, REST, Web, or A2A adapter.
 - No full channel abstraction rewrite beyond keeping public names neutral.

@@ -18,14 +18,18 @@ Runner implementation:
 - write bounded stdout/stderr artifacts;
 - normalize exit status and session id into the gateway result shape.
 
-## First Runner
+## Enabled Runtime Registry
 
-The first supported explicit runner id is `codex`.
+The current only enabled executable runner id is `codex`.
 
 Public task creation must still pass `runner=codex`; there is no implicit
 default. The implementation details for that runner live under runner-private
 modules and must not become public tool, command, callback, queue, or session
 field names.
+
+Runtime registry entries must represent enabled executable runners only.
+Reserved future runner directions belong in planning/reference documents until
+their permission model and execution behavior are implemented and verified.
 
 ## Result Shape
 
@@ -54,7 +58,7 @@ Write mode:
 - runs in an isolated worktree when possible;
 - must not bypass gateway path and verification gates.
 
-## Non-Goals For Phase 1
+## Non-Goals For The Current Registry Phase
 
 - No additional runners.
 - No A2A HTTP endpoints.

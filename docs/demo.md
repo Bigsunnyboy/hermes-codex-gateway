@@ -31,7 +31,7 @@ credentials.
 
 ## Read-Only Flow
 
-In Feishu/Lark, send:
+In the current Feishu/Lark channel adapter, send:
 
 ```text
 /agent runner=codex repo=demo mode=read workspace=demo-read-001
@@ -53,7 +53,7 @@ Show:
 
 ## Approved Write Flow
 
-In Feishu/Lark, send:
+In the current Feishu/Lark channel adapter, send:
 
 ```text
 /agent runner=codex repo=demo mode=write workspace=demo-docs-001 verify=file:docs/demo-note.md allow=docs/demo-note.md
@@ -80,9 +80,9 @@ Show:
 End with the control model:
 
 ```text
-The important part is the boundary: Feishu starts the workflow, Hermes owns the
-plugin and wake gate, the selected runner works in an isolated worktree, and success requires
-the configured policy plus verification.
+The important part is the boundary: the channel adapter starts the workflow,
+Hermes owns the plugin and wake gate, the selected runner works in an isolated
+worktree, and success requires the configured policy plus verification.
 ```
 
 Point viewers to:

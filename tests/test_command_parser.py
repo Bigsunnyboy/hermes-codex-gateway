@@ -49,6 +49,17 @@ def test_parse_rejects_missing_runner() -> None:
         raise AssertionError("expected ValueError")
 
 
+def test_parse_rejects_reserved_future_runners() -> None:
+    for runner in ("claude-code", "qoder", "deepseek-tui", "unknown"):
+        try:
+            parse_agent_command(f"/agent runner={runner} mode=read\nAnalyze.")
+        except ValueError as exc:
+            assert "enabled runner" in str(exc)
+            assert "codex" in str(exc)
+        else:
+            raise AssertionError(f"expected {runner} to be rejected")
+
+
 def test_parse_rejects_old_command_without_exact_literal() -> None:
     old_command = "/" + "codex"
     try:

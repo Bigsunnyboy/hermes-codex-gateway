@@ -30,6 +30,11 @@ class FakeRunner:
         }
 
 
+class RaisingRunner:
+    def run(self, **kwargs):
+        raise AssertionError("runner must not execute for unsupported queued runner")
+
+
 class WritingRunner:
     def __init__(self, repo: Path) -> None:
         self.repo = repo
@@ -132,6 +137,19 @@ def test_run_next_queue_task_claims_and_completes_next_record(tmp_path: Path, ga
     assert result["status"] == "DONE"
     assert result["result"]["success"] is True
     assert queue.get(queued["task_id"])["status"] == "DONE"
+
+
+def test_run_next_queue_task_rejects_forged_reserved_runner_before_execution(
+    tmp_path: Path, gateway_config
+) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    queued = queue.enqueue({"runner": "qoder", "repo": "example-repo", "mode": "read", "prompt": "Analyze."})
+
+    result = run_next_queue_task(gateway_config, queue=queue, runner=RaisingRunner())
+
+    assert result["task_id"] == queued["task_id"]
+    assert result["status"] == "FAILED"
+    assert "enabled runner" in result["result"]["error"]
 
 
 def test_run_next_queue_task_delivers_feishu_result_when_target_exists(

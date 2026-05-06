@@ -4,16 +4,19 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](pyproject.toml)
 
-Run governed local agent tasks from Feishu/Lark through Hermes Agent.
+Run governed agent tasks from Hermes channel adapters through selected local
+runners.
 
-Hermes Agent Gateway is an opt-in Hermes Agent plugin for teams that want chat
-operators to start local agent work without giving up approval gates, worktree
-isolation, path allowlists, verification commands, and auditable artifacts.
+Hermes Agent Gateway is an opt-in Hermes Agent plugin for teams that want
+channel operators to start governed agent work without giving up approval gates,
+worktree isolation, path allowlists, verification commands, and auditable
+artifacts. Feishu/Lark is the current channel adapter starting point; the
+gateway is intended to stay multi-channel and multi-runner-capable.
 
-It turns a Feishu `/agent ...` command into an auditable background task:
+It turns a channel `/agent ...` command into an auditable background task:
 
 ```text
-Feishu /agent -> Hermes plugin hook -> queue -> cron wake gate -> isolated git worktree -> selected runner -> verify -> Feishu result/card update
+channel /agent -> Hermes plugin hook -> queue -> cron wake gate -> isolated git worktree -> selected runner -> verify -> channel result/card update
 ```
 
 ## Quick Start
@@ -31,7 +34,7 @@ cp ~/.hermes/plugins/hermes-agent-gateway/config.example.json \
   ~/.hermes/plugins/hermes-agent-gateway/config.json
 ```
 
-Then try a read-only task from Feishu/Lark:
+Then try a read-only task through the current Feishu/Lark channel adapter:
 
 ```text
 /agent runner=codex repo=example mode=read workspace=first-read
@@ -46,7 +49,7 @@ Running an agent from chat is useful, but write-capable local automation needs
 guardrails. This plugin keeps runner-specific behavior outside Hermes core while
 providing a practical operator workflow:
 
-- Feishu/Lark remains the chat control plane.
+- Feishu/Lark is the current channel adapter, not the only intended platform.
 - Hermes Agent owns plugin loading, gateway dispatch, and cron wakeups.
 - The selected runner executes inside isolated worktrees.
 - Write tasks require approval and can be constrained by `allow=...`.
@@ -55,7 +58,8 @@ providing a practical operator workflow:
 
 ## What It Provides
 
-- Feishu `/agent` command parsing before normal agent dispatch.
+- `/agent` command parsing for the current Feishu/Lark channel adapter before
+  normal agent dispatch.
 - Read and write execution modes.
 - Git worktree isolation per `workspace=...`.
 - Write-mode approval gate with Feishu interactive cards when the Hermes
@@ -63,7 +67,7 @@ providing a practical operator workflow:
 - Optional `allow=...` changed-path enforcement.
 - Optional `verify=...` command templates.
 - Captured artifacts for each task.
-- Result delivery back to the original Feishu chat.
+- Result delivery back to the originating channel conversation.
 - Cron wake gate that returns `{"wakeAgent": false}` while the queue is empty,
   so empty ticks do not start an LLM session.
 - Managed `CODEX_HOME` for gateway-launched runner subprocesses, avoiding user
@@ -72,8 +76,9 @@ providing a practical operator workflow:
 ## Requirements
 
 - Hermes Agent with plugin support.
-- Codex CLI available on the gateway host.
-- A Hermes messaging gateway. Feishu/Lark is the primary tested platform.
+- Codex CLI available on the gateway host as the current only enabled
+  executable runner.
+- A Hermes messaging gateway with the current Feishu/Lark channel adapter.
 - A git repository for worktree-isolated execution.
 
 For full Feishu card lifecycle updates, Hermes needs the generic Feishu adapter

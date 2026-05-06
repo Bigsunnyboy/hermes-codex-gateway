@@ -47,8 +47,8 @@ ensure_agent_worker_cron
 
 The created cron job uses `~/.hermes/scripts/agent_queue_worker_wake.py`.
 Empty queues return `{"wakeAgent": false}` and Hermes skips the agent run.
-Non-empty queues wake the plugin tool path so the live Feishu adapter can update
-RUNNING/DONE/FAILED lifecycle cards.
+Non-empty queues wake the plugin tool path so the active channel adapter,
+currently Feishu/Lark, can update RUNNING/DONE/FAILED lifecycle cards.
 
 The worker prompt includes a computed `gateway-worker-prompt:<hash>` prefix so
 cron repair can detect stale prompt versions even when Hermes only returns a
@@ -75,7 +75,7 @@ Expected result:
 - No response to `/agent`: confirm the plugin is enabled and the gateway was restarted.
 - Queue does not drain: run `ensure_agent_worker_cron` and inspect `~/.hermes/agent_queue`.
 - Runner cannot reach the API: configure non-secret proxy variables in `codex_env`.
-- Card update unavailable: text approval and final delivery should still work if the Hermes Feishu adapter lacks card update hooks.
+- Card update unavailable: text approval and final delivery should still work if the active channel adapter lacks card update hooks.
 - Unexpected write failure: inspect task artifact `after_status.txt` and compare with the `allow=...` list.
 
 ## Safety Rules

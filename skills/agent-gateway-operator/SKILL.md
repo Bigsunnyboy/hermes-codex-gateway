@@ -1,7 +1,8 @@
 # Agent Gateway Operator
 
 Use this skill when operating Hermes Agent Gateway from Hermes Agent or a
-messaging platform.
+messaging platform. The examples use the current Feishu/Lark channel adapter and
+the current only enabled executable runner, `codex`.
 
 ## When To Use
 
@@ -15,7 +16,7 @@ messaging platform.
 - Use `mode=read` for analysis and `mode=write` only for file changes.
 - For write tasks, include both `verify=` and `allow=` whenever possible.
 - Do not target `.env`, `*.key`, `*secret*`, `auth.json`, or `credentials*`.
-- If a task reports `APPROVAL_REQUIRED`, use the Feishu approval card when
+- If a task reports `APPROVAL_REQUIRED`, use the channel approval card when
   available. Use `/agent approve <task_id>` only as fallback.
 
 ## Examples

@@ -14,6 +14,12 @@ def test_create_agent_task_schema_uses_hermes_function_shape() -> None:
     parameters = module.CREATE_AGENT_TASK_SCHEMA["parameters"]
     assert parameters["type"] == "object"
     assert parameters["required"] == ["runner", "mode", "prompt"]
+    runner_description = parameters["properties"]["runner"]["description"]
+    assert "enabled runner" in runner_description
+    assert "codex" in runner_description
+    assert "Claude" not in runner_description
+    assert "Qoder" not in runner_description
+    assert "DeepSeek" not in runner_description
 
     class Context:
         def __init__(self) -> None:

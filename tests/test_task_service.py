@@ -31,6 +31,15 @@ class FakeRunner:
         }
 
 
+class RecordingRunner:
+    def __init__(self) -> None:
+        self.called = False
+
+    def run(self, **kwargs):
+        self.called = True
+        raise AssertionError("runner must not execute for unsupported runner names")
+
+
 def _init_git_repo(repo: Path) -> None:
     subprocess.run(["git", "-C", str(repo), "init"], check=True, capture_output=True, text=True)
     subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
@@ -78,6 +87,39 @@ def test_create_read_task_records_artifacts(tmp_path: Path) -> None:
     task_payload = json.loads((artifact_dir / "task.json").read_text(encoding="utf-8"))
     assert task_payload["prompt"] == "Analyze only."
     assert task_payload["command"][0:2] == ["codex", "exec"]
+
+
+def test_create_agent_task_rejects_reserved_future_runner_before_execution(tmp_path: Path) -> None:
+    workspace = tmp_path / "projects"
+    repo = workspace / "example-repo"
+    repo.mkdir(parents=True)
+    cfg = GatewayConfig(
+        workspace_roots=[workspace],
+        repo_aliases={"example-repo": repo},
+        artifact_root=tmp_path / "artifacts",
+        worktree_root=tmp_path / "worktrees",
+        session_root=tmp_path / "sessions",
+        codex_executable="codex",
+    )
+    runner = RecordingRunner()
+
+    try:
+        create_agent_task(
+            cfg,
+            runner=runner,
+            runner_name="qoder",
+            repo="example-repo",
+            path=None,
+            mode="read",
+            prompt="Analyze only.",
+        )
+    except ValueError as exc:
+        assert "enabled runner" in str(exc)
+        assert "codex" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
+
+    assert runner.called is False
 
 
 def test_git_task_runs_in_isolated_worktree_and_ignores_main_workspace_mutation(tmp_path: Path) -> None:

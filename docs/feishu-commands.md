@@ -1,6 +1,8 @@
-# Feishu Commands
+# Feishu/Lark Channel Commands
 
-The plugin listens for `/agent` commands through the Hermes Feishu gateway.
+The current channel adapter listens for `/agent` commands through the Hermes
+Feishu/Lark gateway path. This is the first platform entry point, not the
+gateway's long-term platform boundary.
 
 ## Read-Only Task
 
