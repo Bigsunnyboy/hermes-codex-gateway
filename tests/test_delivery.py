@@ -97,6 +97,39 @@ def test_update_task_lifecycle_card_updates_saved_feishu_card(tmp_path: Path) ->
     assert queue.get(queued["task_id"])["card_updates"][0]["phase"] == "DONE"
 
 
+def test_update_task_lifecycle_card_updates_saved_lark_card(tmp_path: Path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    queued = queue.enqueue(
+        {
+            "mode": "write",
+            "prompt": "Run.",
+            "delivery": {
+                "platform": "lark",
+                "chat_id": "oc_lark",
+                "approval_card": {
+                    "platform": "lark",
+                    "chat_id": "oc_lark",
+                    "message_id": "om_card",
+                    "kind": "agent_write_approval",
+                },
+            },
+        }
+    )
+    queue.complete(queued["task_id"], {"success": True, "status": "DONE", "returncode": 0})
+    updates = []
+
+    result = update_task_lifecycle_card(
+        queue,
+        queue.get(queued["task_id"]),
+        phase="DONE",
+        card_updater=lambda **kwargs: updates.append(kwargs) or {"success": True, "message_id": kwargs["message_id"]},
+    )
+
+    assert result["success"] is True
+    assert updates[0]["platform"] == "lark"
+    assert updates[0]["chat_id"] == "oc_lark"
+
+
 def test_deliver_task_result_prefers_card_update_when_approval_card_exists(tmp_path: Path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue(
@@ -327,3 +360,50 @@ def test_deliver_task_result_falls_back_to_send_message_tool(tmp_path: Path) -> 
     assert result["status"] == "DELIVERED"
     assert tool_calls[0]["target"] == "feishu:oc_123"
     assert "Agent task finished" in tool_calls[0]["message"]
+
+
+def test_deliver_task_result_sends_lark_final_output(tmp_path: Path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    queued = queue.enqueue(
+        {
+            "mode": "read",
+            "prompt": "Analyze.",
+            "delivery": {"platform": "lark", "chat_id": "oc_lark", "reply_to": "om_msg"},
+        }
+    )
+    queue.complete(queued["task_id"], {"success": True, "status": "DONE", "returncode": 0})
+    sends = []
+
+    result = deliver_task_result(
+        queue,
+        task_id=queued["task_id"],
+        adapter_sender=lambda **kwargs: sends.append(kwargs) or {"success": True, "message_id": "sent-lark"},
+    )
+
+    assert result["status"] == "DELIVERED"
+    assert result["target"] == "lark:oc_lark"
+    assert sends[0]["platform"] == "lark"
+    assert sends[0]["chat_id"] == "oc_lark"
+    assert sends[0]["reply_to"] == "om_msg"
+
+
+def test_deliver_task_result_uses_explicit_tool_fallback_without_live_gateway_imports(tmp_path: Path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    queued = queue.enqueue(
+        {
+            "mode": "read",
+            "prompt": "Analyze.",
+            "delivery": {"platform": "lark", "chat_id": "oc_lark"},
+        }
+    )
+    queue.complete(queued["task_id"], {"success": True, "status": "DONE"})
+    tool_calls = []
+
+    result = deliver_task_result(
+        queue,
+        task_id=queued["task_id"],
+        tool_sender=lambda args: tool_calls.append(args) or json.dumps({"success": True, "message_id": "tool-sent"}),
+    )
+
+    assert result["status"] == "DELIVERED"
+    assert tool_calls[0]["target"] == "lark:oc_lark"

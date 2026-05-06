@@ -8,6 +8,8 @@ try:
         approval_action_allowed,
         build_card_action_callback_response,
         handle_pre_gateway_dispatch,
+        make_adapter_sender,
+        make_card_updater,
     )
     from .hermes_agent_gateway.policy import resolve_target
     from .hermes_agent_gateway.queue import FileTaskQueue
@@ -31,6 +33,8 @@ except ImportError:
         approval_action_allowed,
         build_card_action_callback_response,
         handle_pre_gateway_dispatch,
+        make_adapter_sender,
+        make_card_updater,
     )
     from hermes_agent_gateway.policy import resolve_target
     from hermes_agent_gateway.queue import FileTaskQueue
@@ -222,24 +226,35 @@ def _handle_submit_agent_command(args: dict, **_: object) -> str:
         return tool_error(f"submit_agent_command failed: {type(exc).__name__}: {exc}")
 
 
-def _handle_run_next_agent_task(args: dict, **_: object) -> str:
+def _handle_run_next_agent_task(args: dict, **kwargs: object) -> str:
     from tools.registry import tool_error, tool_result
 
     try:
         cfg = load_config()
-        return tool_result(run_next_queue_task(cfg, queue=_queue(cfg)))
+        gateway = kwargs.get("gateway")
+        return tool_result(
+            run_next_queue_task(
+                cfg,
+                queue=_queue(cfg),
+                delivery_sender=make_adapter_sender(gateway),
+                card_updater=make_card_updater(gateway),
+            )
+        )
     except Exception as exc:
         return tool_error(f"run_next_agent_task failed: {type(exc).__name__}: {exc}")
 
 
-def _handle_deliver_agent_task_result(args: dict, **_: object) -> str:
+def _handle_deliver_agent_task_result(args: dict, **kwargs: object) -> str:
     from tools.registry import tool_error, tool_result
 
     try:
+        gateway = kwargs.get("gateway")
         return tool_result(
             deliver_task_result(
                 _queue(load_config()),
                 task_id=args.get("task_id"),
+                adapter_sender=make_adapter_sender(gateway),
+                card_updater=make_card_updater(gateway),
             )
         )
     except Exception as exc:

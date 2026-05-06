@@ -5,27 +5,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
+from .channel_boundary import approval_card_from_queue, delivery_target_from_queue
 from .queue import FileTaskQueue
 
 AdapterSender = Callable[..., Any]
 CardUpdater = Callable[..., Any]
 
 FINAL_STATUSES = {"DONE", "FAILED"}
-
-
-def delivery_target_from_event(*, event: Any, platform: str) -> dict[str, str] | None:
-    source = getattr(event, "source", None)
-    chat_id = getattr(source, "chat_id", None)
-    if not chat_id:
-        return None
-    target: dict[str, str] = {
-        "platform": platform,
-        "chat_id": str(chat_id),
-    }
-    reply_to = getattr(event, "message_id", None)
-    if reply_to:
-        target["reply_to"] = str(reply_to)
-    return target
 
 
 def deliver_task_result(
@@ -50,16 +36,13 @@ def deliver_task_result(
         }
 
     payload = record.get("payload") or {}
-    target = payload.get("delivery") or {}
-    platform = str(target.get("platform") or "").lower()
-    chat_id = str(target.get("chat_id") or "")
-    if not platform or not chat_id:
+    target = delivery_target_from_queue(payload.get("delivery") or {})
+    if target is None:
         result = _delivery_result("NO_TARGET", queue_task_id, None, {"error": "No delivery target saved."})
         queue.mark_delivery(queue_task_id, result)
         return result
 
     message = format_task_result(record)
-    reply_to = target.get("reply_to")
     metadata = {
         "handled_by": "hermes-agent-gateway",
         "agent_queue_task_id": queue_task_id,
@@ -71,29 +54,29 @@ def deliver_task_result(
         card_updater=card_updater,
     )
     if _send_succeeded(card_result):
-        result = _delivery_result("DELIVERED", queue_task_id, f"{platform}:{chat_id}", card_result)
+        result = _delivery_result("DELIVERED", queue_task_id, _target_key(target), card_result)
         result["method"] = "card_update"
         queue.mark_delivery(queue_task_id, result)
         return result
 
     send_result = _send_with_adapter(
         adapter_sender,
-        platform=platform,
-        chat_id=chat_id,
+        platform=target.channel,
+        chat_id=target.conversation_id,
         message=message,
-        reply_to=reply_to,
+        reply_to=target.reply_to_message_id,
         metadata=metadata,
     )
     if not _send_succeeded(send_result):
         send_result = _send_with_tool(
             tool_sender,
-            platform=platform,
-            chat_id=chat_id,
+            platform=target.channel,
+            chat_id=target.conversation_id,
             message=message,
         )
 
     status = "DELIVERED" if _send_succeeded(send_result) else "DELIVERY_FAILED"
-    result = _delivery_result(status, queue_task_id, f"{platform}:{chat_id}", send_result)
+    result = _delivery_result(status, queue_task_id, _target_key(target), send_result)
     queue.mark_delivery(queue_task_id, result)
     return result
 
@@ -107,19 +90,16 @@ def update_task_lifecycle_card(
 ) -> dict[str, Any]:
     payload = record.get("payload") or {}
     delivery = payload.get("delivery") or {}
-    approval_card = delivery.get("approval_card") or {}
-    message_id = str(approval_card.get("message_id") or "")
-    chat_id = str(approval_card.get("chat_id") or delivery.get("chat_id") or "")
-    platform = str(approval_card.get("platform") or delivery.get("platform") or "").lower()
-    if not message_id or not chat_id or platform not in {"feishu", "lark"}:
-        return {"success": False, "error": "No updatable Feishu approval card saved."}
+    approval_card = approval_card_from_queue(delivery.get("approval_card") or {})
+    if approval_card is None:
+        return {"success": False, "error": "No updatable channel approval card saved."}
 
     card = build_task_lifecycle_card(record, phase=phase)
     update_result = _update_card_with_adapter(
         card_updater,
-        platform=platform,
-        chat_id=chat_id,
-        message_id=message_id,
+        platform=approval_card.channel,
+        chat_id=approval_card.conversation_id,
+        message_id=approval_card.message_id,
         card=card,
         metadata={
             "handled_by": "hermes-agent-gateway",
@@ -131,7 +111,7 @@ def update_task_lifecycle_card(
         str(record["task_id"]),
         {
             "phase": phase,
-            "message_id": message_id,
+            "message_id": approval_card.message_id,
             "result": update_result,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         },
@@ -244,62 +224,13 @@ def _select_deliverable(queue: FileTaskQueue, *, task_id: str | None) -> dict[st
 def _send_with_adapter(adapter_sender: AdapterSender | None, **kwargs: Any) -> Any:
     if adapter_sender is not None:
         return adapter_sender(**kwargs)
-    try:
-        from gateway.config import Platform
-        from gateway.run import _gateway_runner_ref
-        from model_tools import _run_async
-
-        runner = _gateway_runner_ref()
-        if runner is None:
-            return {"success": False, "error": "No live gateway runner."}
-        platform = Platform(str(kwargs["platform"]))
-        adapter = runner.adapters.get(platform)
-        if adapter is None:
-            return {"success": False, "error": f"No live adapter for {platform.value}."}
-        send_result = _run_async(
-            adapter.send(
-                kwargs["chat_id"],
-                kwargs["message"],
-                reply_to=kwargs.get("reply_to"),
-                metadata=kwargs.get("metadata"),
-            )
-        )
-        if getattr(send_result, "success", False):
-            return {"success": True, "message_id": getattr(send_result, "message_id", None)}
-        return {"success": False, "error": getattr(send_result, "error", "Adapter send failed.")}
-    except Exception as exc:
-        return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"success": False, "error": "No channel adapter sender provided."}
 
 
 def _update_card_with_adapter(card_updater: CardUpdater | None, **kwargs: Any) -> Any:
     if card_updater is not None:
         return card_updater(**kwargs)
-    try:
-        from gateway.config import Platform
-        from gateway.run import _gateway_runner_ref
-        from model_tools import _run_async
-
-        runner = _gateway_runner_ref()
-        if runner is None:
-            return {"success": False, "error": "No live gateway runner."}
-        platform = Platform(str(kwargs["platform"]))
-        adapter = runner.adapters.get(platform)
-        if adapter is None:
-            return {"success": False, "error": f"No live adapter for {platform.value}."}
-        if not hasattr(adapter, "edit_interactive_card"):
-            return {"success": False, "error": "Adapter does not support interactive card update."}
-        update_result = _run_async(
-            adapter.edit_interactive_card(
-                kwargs["chat_id"],
-                kwargs["message_id"],
-                kwargs["card"],
-            )
-        )
-        if getattr(update_result, "success", False):
-            return {"success": True, "message_id": getattr(update_result, "message_id", kwargs["message_id"])}
-        return {"success": False, "error": getattr(update_result, "error", "Card update failed.")}
-    except Exception as exc:
-        return {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+    return {"success": False, "error": "No channel card updater provided."}
 
 
 def _send_with_tool(
@@ -336,6 +267,10 @@ def _send_succeeded(value: Any) -> bool:
     if isinstance(value, dict):
         return bool(value.get("success"))
     return bool(getattr(value, "success", False))
+
+
+def _target_key(target) -> str:
+    return f"{target.channel}:{target.conversation_id}"
 
 
 def _delivery_result(status: str, task_id: str, target: str | None, send_result: Any) -> dict[str, Any]:

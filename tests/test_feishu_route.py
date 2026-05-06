@@ -7,6 +7,8 @@ from hermes_agent_gateway.config import GatewayConfig
 from hermes_agent_gateway.feishu_router import (
     build_card_action_callback_response,
     handle_pre_gateway_dispatch,
+    make_adapter_sender,
+    make_card_updater,
 )
 from hermes_agent_gateway.queue import FileTaskQueue
 
@@ -53,6 +55,10 @@ class FakeAdapter:
 
 class PlatformKey:
     value = "feishu"
+
+
+class LarkPlatformKey:
+    value = "lark"
 
 
 def _config_with_approval_policy(*, users=None, chats=None) -> GatewayConfig:
@@ -114,6 +120,31 @@ def test_pre_gateway_dispatch_enqueues_agent_command_and_sends_ack(tmp_path) -> 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
     assert adapter.sent[0]["chat_id"] == "chat-1"
+    assert result["task_id"] in adapter.sent[0]["content"]
+
+
+def test_lark_pre_gateway_dispatch_enqueues_agent_command_and_sends_ack(tmp_path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    adapter = FakeAdapter()
+    gateway = SimpleNamespace(adapters={"lark": adapter})
+    event = SimpleNamespace(
+        text="/agent runner=codex repo=example-repo mode=read\nAnalyze only.",
+        message_id="msg-lark",
+        source=SimpleNamespace(platform="lark", chat_id="chat-lark"),
+    )
+
+    result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
+
+    assert result["action"] == "skip"
+    payload = queue.get(result["task_id"])["payload"]
+    assert payload["delivery"] == {
+        "platform": "lark",
+        "chat_id": "chat-lark",
+        "reply_to": "msg-lark",
+    }
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.sleep(0))
+    assert adapter.sent[0]["chat_id"] == "chat-lark"
     assert result["task_id"] in adapter.sent[0]["content"]
 
 
@@ -209,6 +240,32 @@ def test_pre_gateway_dispatch_sends_approval_card_for_write_task(tmp_path) -> No
     assert values[1]["hermes_agent_action"] == "reject"
     assert values[0]["task_id"] == result["task_id"]
     assert not adapter.sent
+
+
+def test_lark_pre_gateway_dispatch_sends_approval_card_for_write_task(tmp_path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    adapter = FakeAdapter()
+    gateway = SimpleNamespace(adapters={LarkPlatformKey(): adapter})
+    event = SimpleNamespace(
+        text="/agent runner=codex repo=example-repo mode=write workspace=fix verify=pytest allow=app/\nFix it.",
+        message_id="msg-lark",
+        source=SimpleNamespace(platform="lark", chat_id="chat-lark"),
+    )
+
+    result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
+
+    assert result["status"] == "APPROVAL_REQUIRED"
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.sleep(0))
+    saved = queue.get(result["task_id"])["payload"]["delivery"]["approval_card"]
+    assert saved == {
+        "platform": "lark",
+        "chat_id": "chat-lark",
+        "message_id": "msg-card",
+        "reply_to": "msg-lark",
+        "kind": "agent_write_approval",
+    }
+    assert adapter.cards[0]["chat_id"] == "chat-lark"
 
 
 def test_pre_gateway_dispatch_approves_agent_task_by_card_action(tmp_path) -> None:
@@ -340,6 +397,43 @@ def test_pre_gateway_dispatch_rejects_agent_task_by_card_action(tmp_path) -> Non
     assert record["approval"]["rejected_by"] == "ou_user"
 
 
+def test_lark_pre_gateway_dispatch_approves_and_updates_saved_card(tmp_path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    queued = queue.enqueue(
+        {
+            "repo": "example-repo",
+            "mode": "write",
+            "prompt": "Fix it.",
+            "delivery": {
+                "platform": "lark",
+                "chat_id": "chat-lark",
+                "approval_card": {
+                    "platform": "lark",
+                    "chat_id": "chat-lark",
+                    "message_id": "msg-card",
+                    "kind": "agent_write_approval",
+                },
+            },
+        }
+    )
+    adapter = FakeAdapter()
+    gateway = SimpleNamespace(adapters={"lark": adapter})
+    event = SimpleNamespace(
+        text=f"/agent approve {queued['task_id']}",
+        message_id="msg-approve",
+        source=SimpleNamespace(platform="lark", chat_id="chat-lark", user_id="ou_user", user_name="Lark User"),
+    )
+
+    result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
+
+    assert result["reason"] == "agent-task-approved"
+    assert queue.get(queued["task_id"])["status"] == "QUEUED"
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.sleep(0))
+    assert adapter.card_edits[0]["chat_id"] == "chat-lark"
+    assert "Lark User" in adapter.card_edits[0]["card"]["elements"][0]["content"]
+
+
 def test_card_action_callback_response_builds_approved_inline_card() -> None:
     result = build_card_action_callback_response(
         action_value={"hermes_agent_action": "approve", "task_id": "queued_1"},
@@ -413,3 +507,44 @@ def test_pre_gateway_dispatch_reports_agent_task_status(tmp_path) -> None:
     loop.run_until_complete(asyncio.sleep(0))
     assert "Agent task status" in adapter.sent[0]["content"]
     assert "APPROVAL_REQUIRED" in adapter.sent[0]["content"]
+
+
+def test_live_adapter_sender_works_inside_running_event_loop() -> None:
+    adapter = FakeAdapter()
+    gateway = SimpleNamespace(adapters={"lark": adapter})
+    sender = make_adapter_sender(gateway)
+
+    async def send_inside_loop():
+        return sender(
+            platform="lark",
+            chat_id="chat-lark",
+            message="Done.",
+            reply_to="msg-lark",
+            metadata={"handled_by": "test"},
+        )
+
+    result = asyncio.run(send_inside_loop())
+
+    assert result["success"] is True
+    assert adapter.sent[0]["chat_id"] == "chat-lark"
+    assert adapter.sent[0]["reply_to"] == "msg-lark"
+
+
+def test_live_card_updater_works_inside_running_event_loop() -> None:
+    adapter = FakeAdapter()
+    gateway = SimpleNamespace(adapters={"lark": adapter})
+    updater = make_card_updater(gateway)
+
+    async def update_inside_loop():
+        return updater(
+            platform="lark",
+            chat_id="chat-lark",
+            message_id="msg-card",
+            card={"config": {"wide_screen_mode": True}},
+        )
+
+    result = asyncio.run(update_inside_loop())
+
+    assert result["success"] is True
+    assert result["message_id"] == "msg-card"
+    assert adapter.card_edits[0]["message_id"] == "msg-card"

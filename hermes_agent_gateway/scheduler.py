@@ -14,7 +14,7 @@ from .task_service import Runner, create_agent_task
 
 _WORKER_PROMPT_BODY = (
     "Use the Hermes tool run_next_agent_task exactly once; it runs one queued task and "
-    "auto-delivers the final result to the original Feishu chat when a delivery target exists. "
+    "auto-delivers the final result to the original channel conversation when a delivery target exists. "
     "If it returns EMPTY, reply briefly that the agent queue is empty. "
     "Do not use terminal or spawn the runner directly."
 )

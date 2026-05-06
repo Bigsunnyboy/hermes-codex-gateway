@@ -2,11 +2,20 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from typing import Any
 
+from .channel_boundary import (
+    ApprovalCardRef,
+    ChannelActor,
+    ChannelCommand,
+    DeliveryTarget,
+    approval_card_to_queue,
+    delivery_target_to_queue,
+    normalize_channel,
+)
 from .command_parser import parse_agent_command
 from .config import GatewayConfig
-from .delivery import delivery_target_from_event
 from .queue import FileTaskQueue
 from .risk_policy import assess_task_risk
 from .verify_templates import expand_verify_templates
@@ -52,13 +61,11 @@ def handle_pre_gateway_dispatch(
     gateway: Any = None,
     cfg: GatewayConfig | None = None,
 ) -> dict[str, Any]:
-    text = str(getattr(event, "text", "") or "").strip()
-    if not (_matches_command(text, "/agent") or _matches_command(text, "/card")):
+    command_event = channel_command_from_event(event)
+    if command_event is None:
         return {"action": "allow"}
-
-    source = getattr(event, "source", None)
-    platform = _platform_value(getattr(source, "platform", ""))
-    if platform not in {"feishu", "lark"}:
+    text = command_event.text
+    if not (_matches_command(text, "/agent") or _matches_command(text, "/card")):
         return {"action": "allow"}
 
     command = _parse_control_command(text) or _parse_card_control_command(text)
@@ -68,7 +75,7 @@ def handle_pre_gateway_dispatch(
             queue=queue,
             gateway=gateway,
             event=event,
-            platform=platform,
+            platform=command_event.channel,
             cfg=cfg,
         )
 
@@ -82,11 +89,10 @@ def handle_pre_gateway_dispatch(
         verify_commands=verify_commands,
         allowed_paths=list(payload.get("allowed_paths") or []),
     )
-    delivery = delivery_target_from_event(event=event, platform=platform)
-    if delivery:
-        payload["delivery"] = delivery
+    if command_event.delivery:
+        payload["delivery"] = delivery_target_to_queue(command_event.delivery)
     queued = queue.enqueue(payload)
-    _send_ack(gateway=gateway, event=event, platform=platform, queued=queued, queue=queue)
+    _send_ack(gateway=gateway, event=event, platform=command_event.channel, queued=queued, queue=queue)
     return {
         "action": "skip",
         "reason": "agent-command-enqueued",
@@ -254,6 +260,42 @@ def _platform_value(value: Any) -> str:
     return str(getattr(value, "value", value) or "").lower()
 
 
+def channel_command_from_event(event: Any) -> ChannelCommand | None:
+    text = str(getattr(event, "text", "") or "").strip()
+    source = getattr(event, "source", None)
+    try:
+        platform = normalize_channel(getattr(source, "platform", ""))
+    except ValueError:
+        return None
+    return ChannelCommand(
+        channel=platform,
+        text=text,
+        actor=channel_actor_from_event(event, platform),
+        delivery=delivery_target_from_event(event, platform),
+        message_id=str(getattr(event, "message_id", "") or "") or None,
+    )
+
+
+def channel_actor_from_event(event: Any, platform: str) -> ChannelActor:
+    return ChannelActor(
+        channel=normalize_channel(platform),
+        actor_id=_source_user_id(event),
+        display_name=_source_user_display_name(event),
+    )
+
+
+def delivery_target_from_event(event: Any, platform: str) -> DeliveryTarget | None:
+    source = getattr(event, "source", None)
+    chat_id = getattr(source, "chat_id", None)
+    if not chat_id:
+        return None
+    return DeliveryTarget(
+        channel=normalize_channel(platform),
+        conversation_id=str(chat_id),
+        reply_to_message_id=str(getattr(event, "message_id", "") or "") or None,
+    )
+
+
 def _send_ack(
     *,
     gateway: Any,
@@ -349,13 +391,14 @@ async def _send_interactive_card(
     if queue is not None and task_id and message_id:
         queue.mark_approval_card(
             task_id,
-            {
-                "platform": platform,
-                "chat_id": chat_id,
-                "message_id": message_id,
-                "reply_to": reply_to,
-                "kind": "agent_write_approval",
-            },
+            approval_card_to_queue(
+                ApprovalCardRef(
+                    channel=normalize_channel(platform),
+                    conversation_id=chat_id,
+                    message_id=message_id,
+                    reply_to_message_id=reply_to,
+                )
+            ),
         )
 
 
@@ -482,6 +525,74 @@ def _send_text(*, gateway: Any, event: Any, platform: str, content: str) -> None
     except RuntimeError:
         loop = asyncio.get_event_loop()
     loop.create_task(coroutine)
+
+
+def make_adapter_sender(gateway: Any):
+    def send(**kwargs: Any) -> dict[str, Any]:
+        adapter = _adapter_for_platform(getattr(gateway, "adapters", {}) or {}, str(kwargs.get("platform") or ""))
+        if adapter is None:
+            return {"success": False, "error": f"No live adapter for {kwargs.get('platform')}."}
+        return _run_adapter_result(
+            adapter.send(
+                kwargs["chat_id"],
+                kwargs["message"],
+                reply_to=kwargs.get("reply_to"),
+                metadata=kwargs.get("metadata"),
+            )
+        )
+
+    return send
+
+
+def make_card_updater(gateway: Any):
+    def update(**kwargs: Any) -> dict[str, Any]:
+        adapter = _adapter_for_platform(getattr(gateway, "adapters", {}) or {}, str(kwargs.get("platform") or ""))
+        if adapter is None:
+            return {"success": False, "error": f"No live adapter for {kwargs.get('platform')}."}
+        if not hasattr(adapter, "edit_interactive_card"):
+            return {"success": False, "error": "Adapter does not support interactive card update."}
+        return _run_adapter_result(
+            adapter.edit_interactive_card(
+                kwargs["chat_id"],
+                kwargs["message_id"],
+                kwargs["card"],
+            ),
+            default_message_id=kwargs.get("message_id"),
+        )
+
+    return update
+
+
+def _run_adapter_result(coroutine: Any, *, default_message_id: str | None = None) -> dict[str, Any]:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        result = asyncio.run(coroutine)
+    else:
+        result = _run_coroutine_in_thread(coroutine)
+    success = getattr(result, "success", None)
+    if callable(success):
+        success = success()
+    if result is None or success:
+        return {"success": True, "message_id": getattr(result, "message_id", default_message_id)}
+    return {"success": False, "error": getattr(result, "error", "Adapter call failed.")}
+
+
+def _run_coroutine_in_thread(coroutine: Any) -> Any:
+    state: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            state["result"] = asyncio.run(coroutine)
+        except Exception as exc:
+            state["error"] = exc
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in state:
+        raise state["error"]
+    return state.get("result")
 
 
 def approval_action_allowed(*, cfg: GatewayConfig | None, event: Any) -> tuple[bool, str]:
