@@ -1,11 +1,11 @@
 [project]
-name = "hermes-codex-gateway"
+name = "hermes-agent-gateway"
 version = "0.1.0"
-description = "Governed Codex task gateway plugin for Hermes Agent."
+description = "Governed agent task gateway plugin for Hermes Agent."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Hermes Codex Gateway contributors" }]
+authors = [{ name = "Hermes Agent Gateway contributors" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

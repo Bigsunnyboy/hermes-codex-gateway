@@ -1,11 +1,11 @@
 # Safety Model
 
-Hermes Codex Gateway adds a governance layer around local Codex execution.
+Hermes Agent Gateway adds a governance layer around local agent execution.
 
 ## Isolation
 
 - Each task runs in a managed git worktree under `worktree_root`.
-- Existing user changes in the source repository are not modified by Codex.
+- Existing user changes in the source repository are not modified by the selected runner.
 - Stable `workspace=` values can resume context while remaining isolated from
   other worktrees.
 
@@ -21,7 +21,7 @@ Hermes Codex Gateway adds a governance layer around local Codex execution.
 
 - Verification templates are expanded before execution.
 - Write tasks can declare `allow=` paths. Changes outside that allowlist fail the
-  task even if Codex exits successfully.
+  task even if the selected runner exits successfully.
 - Output capture is size-limited by `max_output_bytes`.
 
 ## Limits

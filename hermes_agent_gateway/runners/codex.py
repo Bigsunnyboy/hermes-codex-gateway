@@ -61,13 +61,13 @@ class CodexCliRunner:
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ) -> dict[str, Any]:
         command = self.build_command(
             project_path=project_path,
             prompt=prompt,
             mode=mode,
-            codex_session_id=codex_session_id,
+            codex_session_id=agent_session_id,
         )
         started = time.monotonic()
         with stdout_path.open("w", encoding="utf-8") as stdout, stderr_path.open("w", encoding="utf-8") as stderr:
@@ -95,7 +95,7 @@ class CodexCliRunner:
             "command": command,
             "returncode": returncode,
             "duration_seconds": round(time.monotonic() - started, 3),
-            "codex_session_id": _extract_thread_id(stdout_path),
+            "agent_session_id": _extract_thread_id(stdout_path),
         }
 
     def build_env(self) -> dict[str, str]:
@@ -121,7 +121,7 @@ def _copy_limited_stream(source: Iterator[str] | None, target: TextIO, limit: in
             target.write(encoded[:remaining].decode("utf-8", errors="ignore"))
             written = limit
         if not truncated:
-            target.write("\n[output truncated by hermes-codex-gateway]\n")
+            target.write("\n[output truncated by hermes-agent-gateway]\n")
             truncated = True
 
 

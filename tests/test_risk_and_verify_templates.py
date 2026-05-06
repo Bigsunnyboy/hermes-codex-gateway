@@ -1,5 +1,5 @@
-from hermes_local_agent_gateway.risk_policy import assess_task_risk
-from hermes_local_agent_gateway.verify_templates import expand_verify_templates
+from hermes_agent_gateway.risk_policy import assess_task_risk
+from hermes_agent_gateway.verify_templates import expand_verify_templates
 
 
 def test_write_risk_classifies_docs_task_as_medium_when_verified() -> None:
@@ -44,7 +44,7 @@ def test_write_risk_blocks_governance_path_references() -> None:
         mode="write",
         prompt="Change gateway internals.",
         verify_commands=["pytest"],
-        allowed_paths=[".hermes/plugins/hermes-codex-gateway/"],
+        allowed_paths=[".hermes/plugins/hermes-agent-gateway/"],
     )
 
     assert risk["level"] == "critical"

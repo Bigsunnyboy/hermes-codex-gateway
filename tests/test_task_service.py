@@ -2,8 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from hermes_local_agent_gateway.config import GatewayConfig
-from hermes_local_agent_gateway.task_service import create_codex_task
+from hermes_agent_gateway.config import GatewayConfig
+from hermes_agent_gateway.task_service import create_agent_task
 
 
 class FakeRunner:
@@ -18,7 +18,7 @@ class FakeRunner:
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ):
         command = ["codex", "exec", "--cd", str(project_path), "--sandbox", "read-only", "--json", prompt]
         self.commands.append(command)
@@ -56,9 +56,10 @@ def test_create_read_task_records_artifacts(tmp_path: Path) -> None:
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=FakeRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -71,8 +72,8 @@ def test_create_read_task_records_artifacts(tmp_path: Path) -> None:
 
     artifact_dir = Path(result["artifact_dir"])
     assert (artifact_dir / "task.json").exists()
-    assert (artifact_dir / "codex_stdout.jsonl").read_text(encoding="utf-8") == '{"event":"done"}\n'
-    assert (artifact_dir / "codex_stderr.log").read_text(encoding="utf-8") == ""
+    assert (artifact_dir / "agent_stdout.jsonl").read_text(encoding="utf-8") == '{"event":"done"}\n'
+    assert (artifact_dir / "agent_stderr.log").read_text(encoding="utf-8") == ""
 
     task_payload = json.loads((artifact_dir / "task.json").read_text(encoding="utf-8"))
     assert task_payload["prompt"] == "Analyze only."
@@ -95,7 +96,7 @@ def test_git_task_runs_in_isolated_worktree_and_ignores_main_workspace_mutation(
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             assert project_path != repo.resolve()
             assert tmp_path / "worktrees" in project_path.parents
@@ -117,9 +118,10 @@ def test_git_task_runs_in_isolated_worktree_and_ignores_main_workspace_mutation(
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=MutatingMainRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -132,7 +134,7 @@ def test_git_task_runs_in_isolated_worktree_and_ignores_main_workspace_mutation(
     assert result["execution_path"] != result["project_path"]
 
 
-def test_workspace_id_reuses_worktree_and_saved_codex_session(tmp_path: Path) -> None:
+def test_workspace_id_reuses_worktree_and_saved_agent_session(tmp_path: Path) -> None:
     workspace = tmp_path / "projects"
     repo = workspace / "example-repo"
     repo.mkdir(parents=True)
@@ -151,16 +153,16 @@ def test_workspace_id_reuses_worktree_and_saved_codex_session(tmp_path: Path) ->
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
-            self.calls.append((project_path, codex_session_id))
+            self.calls.append((project_path, agent_session_id))
             stdout_path.write_text("", encoding="utf-8")
             stderr_path.write_text("", encoding="utf-8")
             return {
                 "command": ["codex", "exec", "--cd", str(project_path)],
                 "returncode": 0,
                 "duration_seconds": 0.01,
-                "codex_session_id": codex_session_id or "session-1",
+                "agent_session_id": agent_session_id or "session-1",
             }
 
     cfg = GatewayConfig(
@@ -173,18 +175,20 @@ def test_workspace_id_reuses_worktree_and_saved_codex_session(tmp_path: Path) ->
     )
     runner = SessionRunner()
 
-    first = create_codex_task(
+    first = create_agent_task(
         cfg,
         runner=runner,
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
         prompt="Analyze only.",
         workspace_id="browser-fix",
     )
-    second = create_codex_task(
+    second = create_agent_task(
         cfg,
         runner=runner,
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -194,11 +198,11 @@ def test_workspace_id_reuses_worktree_and_saved_codex_session(tmp_path: Path) ->
 
     assert first["execution_path"] == second["execution_path"]
     assert first["workspace_id"] == "browser-fix"
-    assert second["codex_session_id"] == "session-1"
+    assert second["agent_session_id"] == "session-1"
     assert runner.calls[0][1] is None
     assert runner.calls[1][1] == "session-1"
     session_payload = json.loads((tmp_path / "sessions" / "browser-fix.json").read_text(encoding="utf-8"))
-    assert session_payload["codex_session_id"] == "session-1"
+    assert session_payload["agent_session_id"] == "session-1"
 
 
 def test_read_task_marks_workspace_change_as_unsuccessful(tmp_path: Path) -> None:
@@ -218,7 +222,7 @@ def test_read_task_marks_workspace_change_as_unsuccessful(tmp_path: Path) -> Non
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             (project_path / "generated.txt").write_text("mutation\n", encoding="utf-8")
             stdout_path.write_text("", encoding="utf-8")
@@ -238,9 +242,10 @@ def test_read_task_marks_workspace_change_as_unsuccessful(tmp_path: Path) -> Non
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=MutatingRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -267,7 +272,7 @@ def test_read_task_detects_non_git_workspace_mutation(tmp_path: Path) -> None:
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             (project_path / "existing.txt").write_text("changed\n", encoding="utf-8")
             stdout_path.write_text("", encoding="utf-8")
@@ -287,9 +292,10 @@ def test_read_task_detects_non_git_workspace_mutation(tmp_path: Path) -> None:
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=MutatingRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -318,7 +324,7 @@ def test_read_task_detects_already_dirty_file_mutation(tmp_path: Path) -> None:
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             (project_path / "tracked.txt").write_text("dirty after\n", encoding="utf-8")
             stdout_path.write_text("", encoding="utf-8")
@@ -338,9 +344,10 @@ def test_read_task_detects_already_dirty_file_mutation(tmp_path: Path) -> None:
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=MutatingRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -365,7 +372,7 @@ def test_runner_exception_still_writes_task_artifact(tmp_path: Path) -> None:
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             raise RuntimeError("codex crashed")
 
@@ -378,9 +385,10 @@ def test_runner_exception_still_writes_task_artifact(tmp_path: Path) -> None:
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=FailingRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="read",
@@ -416,9 +424,10 @@ def test_write_task_requires_approval_before_runner_executes(tmp_path: Path) -> 
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=UnexpectedRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="write",
@@ -446,9 +455,10 @@ def test_read_task_rejects_verify_commands(tmp_path: Path) -> None:
     )
 
     try:
-        create_codex_task(
+        create_agent_task(
             cfg,
             runner=FakeRunner(),
+            runner_name="codex",
             repo="example-repo",
             path=None,
             mode="read",
@@ -477,7 +487,7 @@ def test_approved_write_task_runs_verification_commands(tmp_path: Path) -> None:
             mode: str,
             stdout_path: Path,
             stderr_path: Path,
-            codex_session_id: str | None = None,
+            agent_session_id: str | None = None,
         ):
             (project_path / "generated.txt").write_text("generated\n", encoding="utf-8")
             stdout_path.write_text("", encoding="utf-8")
@@ -497,9 +507,10 @@ def test_approved_write_task_runs_verification_commands(tmp_path: Path) -> None:
         codex_executable="codex",
     )
 
-    result = create_codex_task(
+    result = create_agent_task(
         cfg,
         runner=WritingRunner(),
+        runner_name="codex",
         repo="example-repo",
         path=None,
         mode="write",

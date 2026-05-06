@@ -1,6 +1,6 @@
 import json
 
-from hermes_local_agent_gateway.config import load_config
+from hermes_agent_gateway.config import load_config
 
 
 def test_load_config_parses_codex_env_and_output_cap(tmp_path):

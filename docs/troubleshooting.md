@@ -5,12 +5,12 @@
 Check that the worker cron exists:
 
 ```text
-ensure_codex_worker_cron
+ensure_agent_worker_cron
 ```
 
 Then inspect the queue directory configured by `artifact_root.parent/agent_queue`.
 
-## Codex Cannot Reach the API
+## Runner Cannot Reach the API
 
 Set non-secret proxy variables in `codex_env`, for example:
 
@@ -25,7 +25,7 @@ Set non-secret proxy variables in `codex_env`, for example:
 
 Do not commit this local `config.json`.
 
-## Write Task Fails After Successful Codex Run
+## Write Task Fails After Successful Runner Run
 
 Check the final error. If it says changes happened outside `allow=`, either the
 prompt changed extra files or the worktree had pre-existing untracked files.
@@ -35,4 +35,4 @@ Use a fresh workspace id for smoke tests.
 
 The plugin falls back to text delivery when the active Hermes Feishu adapter does
 not expose card callback or card update support. Upgrade Hermes Agent or use the
-manual `/codex approve <task_id>` fallback.
+manual `/agent approve <task_id>` fallback.

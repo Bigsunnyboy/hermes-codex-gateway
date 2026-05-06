@@ -1,17 +1,17 @@
-name: hermes-codex-gateway
+name: hermes-agent-gateway
 version: 0.1.0
-description: "Local governed Codex task gateway with workspace policy and artifact capture."
+description: "Local governed agent task gateway with workspace policy and artifact capture."
 author: community
 kind: standalone
 provides_tools:
-  - create_codex_task
-  - submit_codex_command
-  - run_next_codex_task
-  - deliver_codex_task_result
-  - ensure_codex_worker_cron
-  - get_codex_task_status
-  - approve_codex_task
-  - manage_codex_workspace
+  - create_agent_task
+  - submit_agent_command
+  - run_next_agent_task
+  - deliver_agent_task_result
+  - ensure_agent_worker_cron
+  - get_agent_task_status
+  - approve_agent_task
+  - manage_agent_workspace
 provides_hooks:
   - pre_gateway_dispatch
   - feishu_card_action_response

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hermes_local_agent_gateway.queue import FileTaskQueue
+from hermes_agent_gateway.queue import FileTaskQueue
 
 
 def test_file_task_queue_enqueue_approve_and_claim(tmp_path: Path) -> None:

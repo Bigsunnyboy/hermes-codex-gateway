@@ -1,19 +1,19 @@
 import json
 from pathlib import Path
 
-from hermes_local_agent_gateway.delivery import (
+from hermes_agent_gateway.delivery import (
     build_task_lifecycle_card,
     deliver_task_result,
     update_task_lifecycle_card,
 )
-from hermes_local_agent_gateway.queue import FileTaskQueue
+from hermes_agent_gateway.queue import FileTaskQueue
 
 
 def test_deliver_task_result_sends_final_output_and_marks_record(tmp_path: Path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     artifact_dir = tmp_path / "artifacts" / "task-1"
     artifact_dir.mkdir(parents=True)
-    (artifact_dir / "codex_stdout.jsonl").write_text(
+    (artifact_dir / "agent_stdout.jsonl").write_text(
         json.dumps({"type": "agent_message", "message": "Final analysis result."}) + "\n",
         encoding="utf-8",
     )
@@ -34,7 +34,7 @@ def test_deliver_task_result_sends_final_output_and_marks_record(tmp_path: Path)
         {
             "success": True,
             "status": "DONE",
-            "task_id": "codex_task_1",
+            "task_id": "agent_task_1",
             "artifact_dir": str(artifact_dir),
             "project_path": "/home/projects/example-repo",
             "execution_path": "/home/projects/example-repo",
@@ -93,7 +93,7 @@ def test_update_task_lifecycle_card_updates_saved_feishu_card(tmp_path: Path) ->
 
     assert result["success"] is True
     assert updates[0]["message_id"] == "om_card"
-    assert updates[0]["card"]["header"]["title"]["content"] == "Codex task done"
+    assert updates[0]["card"]["header"]["title"]["content"] == "Agent task done"
     assert queue.get(queued["task_id"])["card_updates"][0]["phase"] == "DONE"
 
 
@@ -163,7 +163,7 @@ def test_deliver_task_result_falls_back_to_text_when_card_update_fails(tmp_path:
     assert result["status"] == "DELIVERED"
     assert "method" not in result
     assert sends
-    assert "Codex task finished" in sends[0]["message"]
+    assert "Agent task finished" in sends[0]["message"]
 
 
 def test_build_task_lifecycle_card_renders_failed_state() -> None:
@@ -178,15 +178,15 @@ def test_build_task_lifecycle_card_renders_failed_state() -> None:
     )
 
     assert card["header"]["template"] == "red"
-    assert "Codex task failed" == card["header"]["title"]["content"]
+    assert "Agent task failed" == card["header"]["title"]["content"]
     assert "bad" in card["elements"][0]["content"]
 
 
-def test_deliver_task_result_extracts_nested_codex_agent_message(tmp_path: Path) -> None:
+def test_deliver_task_result_extracts_nested_agent_message(tmp_path: Path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     artifact_dir = tmp_path / "artifacts" / "task-1"
     artifact_dir.mkdir(parents=True)
-    (artifact_dir / "codex_stdout.jsonl").write_text(
+    (artifact_dir / "agent_stdout.jsonl").write_text(
         json.dumps(
             {
                 "type": "item.completed",
@@ -227,7 +227,7 @@ def test_deliver_task_result_extracts_nested_codex_agent_message(tmp_path: Path)
 
     assert result["status"] == "DELIVERED"
     assert sends[0]["message"].startswith("1. 当前路径")
-    assert "Codex task finished" not in sends[0]["message"]
+    assert "Agent task finished" not in sends[0]["message"]
     assert "Artifacts:" not in sends[0]["message"]
 
 
@@ -235,7 +235,7 @@ def test_deliver_task_result_preserves_multiple_assistant_messages(tmp_path: Pat
     queue = FileTaskQueue(tmp_path / "queue")
     artifact_dir = tmp_path / "artifacts" / "task-1"
     artifact_dir.mkdir(parents=True)
-    (artifact_dir / "codex_stdout.jsonl").write_text(
+    (artifact_dir / "agent_stdout.jsonl").write_text(
         "\n".join(
             [
                 json.dumps({"type": "agent_message", "message": "First useful result."}),
@@ -326,4 +326,4 @@ def test_deliver_task_result_falls_back_to_send_message_tool(tmp_path: Path) -> 
 
     assert result["status"] == "DELIVERED"
     assert tool_calls[0]["target"] == "feishu:oc_123"
-    assert "Codex task finished" in tool_calls[0]["message"]
+    assert "Agent task finished" in tool_calls[0]["message"]

@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a Hermes Codex Gateway issue
+about: Report a Hermes Agent Gateway issue
 labels: bug
 ---
 

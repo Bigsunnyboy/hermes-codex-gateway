@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from hermes_local_agent_gateway.runner import CodexCliRunner, _copy_limited_stream
+from hermes_agent_gateway.runners.codex import CodexCliRunner, _copy_limited_stream
 
 
 def test_builds_read_only_codex_exec_command() -> None:
@@ -130,7 +130,7 @@ def test_copy_limited_stream_truncates_runaway_output() -> None:
 
     _copy_limited_stream(iter(["abc", "def", "ghi"]), target, 5)
 
-    assert target.getvalue() == "abcde\n[output truncated by hermes-codex-gateway]\n"
+    assert target.getvalue() == "abcde\n[output truncated by hermes-agent-gateway]\n"
 
 
 def test_run_captures_limited_subprocess_output(tmp_path: Path) -> None:

@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from hermes_local_agent_gateway.worktree import inspect_workspace, remove_workspace
+from hermes_agent_gateway.worktree import inspect_workspace, remove_workspace
 
 
 def _init_repo(repo: Path) -> None:

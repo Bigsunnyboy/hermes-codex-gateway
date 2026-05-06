@@ -61,8 +61,8 @@ def deliver_task_result(
     message = format_task_result(record)
     reply_to = target.get("reply_to")
     metadata = {
-        "handled_by": "hermes-codex-gateway",
-        "codex_queue_task_id": queue_task_id,
+        "handled_by": "hermes-agent-gateway",
+        "agent_queue_task_id": queue_task_id,
     }
     card_result = update_task_lifecycle_card(
         queue,
@@ -122,8 +122,8 @@ def update_task_lifecycle_card(
         message_id=message_id,
         card=card,
         metadata={
-            "handled_by": "hermes-codex-gateway",
-            "codex_queue_task_id": str(record.get("task_id") or ""),
+            "handled_by": "hermes-agent-gateway",
+            "agent_queue_task_id": str(record.get("task_id") or ""),
             "phase": phase,
         },
     )
@@ -158,11 +158,11 @@ def build_task_lifecycle_card(record: dict[str, Any], *, phase: str) -> dict[str
         "REJECTED": "red",
     }.get(status, "grey")
     title = {
-        "RUNNING": "Codex task running",
-        "DONE": "Codex task done",
-        "FAILED": "Codex task failed",
-        "REJECTED": "Codex task rejected",
-    }.get(status, f"Codex task {status.lower()}")
+        "RUNNING": "Agent task running",
+        "DONE": "Agent task done",
+        "FAILED": "Agent task failed",
+        "REJECTED": "Agent task rejected",
+    }.get(status, f"Agent task {status.lower()}")
 
     lines = [
         f"**Task:** `{queue_task_id}`",
@@ -203,7 +203,7 @@ def format_task_result(record: dict[str, Any]) -> str:
     if final_text and status == "DONE" and result.get("success", True):
         return final_text
     lines = [
-        f"Codex task finished: {queue_task_id}",
+        f"Agent task finished: {queue_task_id}",
         f"Status: {status}",
         f"Mode: {payload.get('mode', result.get('mode', 'unknown'))}",
         f"Project: {project_path}",
@@ -211,8 +211,8 @@ def format_task_result(record: dict[str, Any]) -> str:
     ]
     if result.get("workspace_id"):
         lines.append(f"Workspace: {result['workspace_id']}")
-    if result.get("codex_session_id"):
-        lines.append(f"Session: {result['codex_session_id']}")
+    if result.get("agent_session_id"):
+        lines.append(f"Session: {result['agent_session_id']}")
     if "returncode" in result:
         lines.append(f"Return code: {result.get('returncode')}")
     if result.get("workspace_changed") is not None:
@@ -353,7 +353,7 @@ def _delivery_result(status: str, task_id: str, target: str | None, send_result:
 def _extract_final_text(artifact_dir: Any) -> str:
     if not artifact_dir:
         return ""
-    stdout_path = Path(str(artifact_dir)) / "codex_stdout.jsonl"
+    stdout_path = Path(str(artifact_dir)) / "agent_stdout.jsonl"
     candidates: list[str] = []
     try:
         with stdout_path.open("r", encoding="utf-8") as stream:

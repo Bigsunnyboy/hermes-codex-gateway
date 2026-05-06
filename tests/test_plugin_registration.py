@@ -2,18 +2,18 @@ import importlib.util
 from pathlib import Path
 
 
-def test_create_codex_task_schema_uses_hermes_function_shape() -> None:
+def test_create_agent_task_schema_uses_hermes_function_shape() -> None:
     plugin_path = Path(__file__).resolve().parents[1] / "__init__.py"
-    spec = importlib.util.spec_from_file_location("hermes_local_agent_gateway_plugin", plugin_path)
+    spec = importlib.util.spec_from_file_location("hermes_agent_gateway_plugin", plugin_path)
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)
 
-    assert module.CREATE_CODEX_TASK_SCHEMA["name"] == "create_codex_task"
-    assert "description" in module.CREATE_CODEX_TASK_SCHEMA
-    parameters = module.CREATE_CODEX_TASK_SCHEMA["parameters"]
+    assert module.CREATE_AGENT_TASK_SCHEMA["name"] == "create_agent_task"
+    assert "description" in module.CREATE_AGENT_TASK_SCHEMA
+    parameters = module.CREATE_AGENT_TASK_SCHEMA["parameters"]
     assert parameters["type"] == "object"
-    assert parameters["required"] == ["mode", "prompt"]
+    assert parameters["required"] == ["runner", "mode", "prompt"]
 
     class Context:
         def __init__(self) -> None:
@@ -29,8 +29,11 @@ def test_create_codex_task_schema_uses_hermes_function_shape() -> None:
     ctx = Context()
     module.register(ctx)
 
-    assert ctx.calls[0]["schema"] == module.CREATE_CODEX_TASK_SCHEMA
+    assert ctx.calls[0]["schema"] == module.CREATE_AGENT_TASK_SCHEMA
     assert ctx.hooks[0][0] == "pre_gateway_dispatch"
+
+    old_tool = "create_" + "codex" + "_task"
+    assert old_tool not in {call["name"] for call in ctx.calls}
 
 
 def test_plugin_manifest_lists_all_registered_tools() -> None:
@@ -46,7 +49,7 @@ def test_plugin_manifest_lists_all_registered_tools() -> None:
         if in_tools and line.startswith("  - "):
             provided.add(line.split("- ", 1)[1].strip())
 
-    spec = importlib.util.spec_from_file_location("hermes_local_agent_gateway_plugin", plugin_root / "__init__.py")
+    spec = importlib.util.spec_from_file_location("hermes_agent_gateway_plugin", plugin_root / "__init__.py")
     module = importlib.util.module_from_spec(spec)
     assert spec.loader is not None
     spec.loader.exec_module(module)

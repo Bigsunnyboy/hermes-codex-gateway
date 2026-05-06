@@ -14,7 +14,7 @@
   "max_output_bytes": 10485760,
   "max_workspaces": 20,
   "max_worktree_bytes": 5368709120,
-  "worker_cron_name": "codex-queue-worker",
+  "worker_cron_name": "agent-queue-worker",
   "worker_cron_schedule": "every 1m",
   "approval_allowed_user_ids": [],
   "approval_allowed_chat_ids": []

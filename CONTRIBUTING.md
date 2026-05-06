@@ -20,7 +20,7 @@ scripts/sanitize-check.sh
 Run the official Docker install smoke test before release candidates:
 
 ```bash
-scripts/docker-official-smoke.sh /path/to/hermes-codex-gateway
+scripts/docker-official-smoke.sh /path/to/hermes-agent-gateway
 ```
 
 ## Repository Rules

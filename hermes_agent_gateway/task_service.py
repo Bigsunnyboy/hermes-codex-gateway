@@ -23,25 +23,29 @@ class Runner(Protocol):
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ) -> dict[str, Any]:
         ...
 
 
-def create_codex_task(
+def create_agent_task(
     cfg: GatewayConfig,
     *,
     runner: Runner,
+    runner_name: str,
     repo: str | None,
     path: str | None,
     mode: str,
     prompt: str,
     workspace_id: str | None = None,
-    codex_session_id: str | None = None,
+    agent_session_id: str | None = None,
     approved: bool = False,
     verify_commands: list[str] | None = None,
     allowed_paths: list[str] | None = None,
 ) -> dict[str, Any]:
+    runner_name = str(runner_name or "").strip().lower()
+    if runner_name != "codex":
+        raise ValueError("runner is required and must be one of: codex")
     if not prompt.strip():
         raise ValueError("prompt is required")
     verify_commands = expand_verify_templates(verify_commands)
@@ -54,8 +58,8 @@ def create_codex_task(
     project_path = resolve_target(cfg, repo=repo, path=path, mode=mode)
     task_id = new_task_id()
     artifact_dir = create_artifact_dir(cfg.artifact_root, task_id)
-    stdout_path = artifact_dir / "codex_stdout.jsonl"
-    stderr_path = artifact_dir / "codex_stderr.log"
+    stdout_path = artifact_dir / "agent_stdout.jsonl"
+    stderr_path = artifact_dir / "agent_stderr.log"
 
     workspace = ExecutionWorkspace(
         original_path=project_path,
@@ -96,12 +100,13 @@ def create_codex_task(
             "status": "BLOCKED",
             "task_id": task_id,
             "mode": mode,
+            "runner": runner_name,
             "project_path": str(project_path),
             "execution_path": str(execution_path),
             "isolation_mode": workspace.isolation_mode,
             "workspace_id": workspace.workspace_id,
-            "requested_codex_session_id": codex_session_id,
-            "codex_session_id": None,
+            "requested_agent_session_id": agent_session_id,
+            "agent_session_id": None,
             "artifact_dir": str(artifact_dir),
             "command": [],
             "returncode": None,
@@ -124,12 +129,13 @@ def create_codex_task(
             "status": "APPROVAL_REQUIRED",
             "task_id": task_id,
             "mode": mode,
+            "runner": runner_name,
             "project_path": str(project_path),
             "execution_path": str(execution_path),
             "isolation_mode": workspace.isolation_mode,
             "workspace_id": workspace.workspace_id,
-            "requested_codex_session_id": codex_session_id,
-            "codex_session_id": None,
+            "requested_agent_session_id": agent_session_id,
+            "agent_session_id": None,
             "artifact_dir": str(artifact_dir),
             "command": [],
             "returncode": None,
@@ -139,13 +145,13 @@ def create_codex_task(
             "allowed_paths": allowed_paths,
             "risk": risk,
             "prompt": prompt,
-            "error": "Write mode requires approval before Codex execution.",
+            "error": "Write mode requires approval before agent execution.",
         }
         write_json(artifact_dir / "task.json", payload)
         return payload
 
     saved_session = load_workspace_session(cfg.session_root, workspace.workspace_id)
-    resume_session_id = codex_session_id or (saved_session or {}).get("codex_session_id")
+    resume_session_id = agent_session_id or (saved_session or {}).get("agent_session_id")
     before_fingerprint = workspace_fingerprint(execution_path)
     capture_git(execution_path, artifact_dir, prefix="before")
 
@@ -157,7 +163,7 @@ def create_codex_task(
                 mode=mode,
                 stdout_path=stdout_path,
                 stderr_path=stderr_path,
-                codex_session_id=resume_session_id,
+                agent_session_id=resume_session_id,
             )
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
@@ -192,11 +198,11 @@ def create_codex_task(
             policy_error = "Unexpected write changes outside allowlist: " + ", ".join(unexpected_paths)
             error = f"{error}; {policy_error}" if error else policy_error
 
-    resolved_session_id = runner_result.get("codex_session_id") or resume_session_id
+    resolved_session_id = runner_result.get("agent_session_id") or resume_session_id
     save_workspace_session(
         cfg.session_root,
         workspace_id=workspace.workspace_id,
-        codex_session_id=resolved_session_id,
+        agent_session_id=resolved_session_id,
         project_path=project_path,
         execution_path=execution_path,
     )
@@ -206,12 +212,13 @@ def create_codex_task(
         "status": "DONE" if runner_result.get("returncode") == 0 and error is None else "FAILED",
         "task_id": task_id,
         "mode": mode,
+        "runner": runner_name,
         "project_path": str(project_path),
         "execution_path": str(execution_path),
         "isolation_mode": workspace.isolation_mode,
         "workspace_id": workspace.workspace_id,
-        "requested_codex_session_id": codex_session_id,
-        "codex_session_id": resolved_session_id,
+        "requested_agent_session_id": agent_session_id,
+        "agent_session_id": resolved_session_id,
         "artifact_dir": str(artifact_dir),
         "command": runner_result.get("command", []),
         "returncode": runner_result.get("returncode"),

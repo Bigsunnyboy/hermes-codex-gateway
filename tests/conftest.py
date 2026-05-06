@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from hermes_local_agent_gateway.config import GatewayConfig
+from hermes_agent_gateway.config import GatewayConfig
 
 
 @pytest.fixture

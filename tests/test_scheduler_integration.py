@@ -2,8 +2,8 @@ import json
 import subprocess
 from pathlib import Path
 
-from hermes_local_agent_gateway.queue import FileTaskQueue
-from hermes_local_agent_gateway.scheduler import (
+from hermes_agent_gateway.queue import FileTaskQueue
+from hermes_agent_gateway.scheduler import (
     ensure_worker_cron_job,
     ensure_worker_wake_script,
     run_next_queue_task,
@@ -19,7 +19,7 @@ class FakeRunner:
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ):
         stdout_path.write_text("", encoding="utf-8")
         stderr_path.write_text("", encoding="utf-8")
@@ -43,14 +43,14 @@ class WritingRunner:
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ):
         self.calls.append(
             {
                 "project_path": project_path,
                 "prompt": prompt,
                 "mode": mode,
-                "codex_session_id": codex_session_id,
+                "agent_session_id": agent_session_id,
             }
         )
         assert mode == "write"
@@ -72,7 +72,7 @@ class WritingRunner:
             "command": ["codex", "exec", "--cd", str(project_path)],
             "returncode": 0,
             "duration_seconds": 0.01,
-            "codex_session_id": "write-session-1",
+            "agent_session_id": "write-session-1",
         }
 
 
@@ -85,7 +85,7 @@ class WritingUnexpectedFileRunner:
         mode: str,
         stdout_path: Path,
         stderr_path: Path,
-        codex_session_id: str | None = None,
+        agent_session_id: str | None = None,
     ):
         assert mode == "write"
         (project_path / "generated.txt").write_text("generated\n", encoding="utf-8")
@@ -124,7 +124,7 @@ def test_run_next_queue_task_claims_and_completes_next_record(tmp_path: Path, ga
     repo = tmp_path / "projects" / "example-repo"
     repo.mkdir(parents=True)
     queue = FileTaskQueue(tmp_path / "queue")
-    queued = queue.enqueue({"repo": "example-repo", "mode": "read", "prompt": "Analyze."})
+    queued = queue.enqueue({"runner": "codex", "repo": "example-repo", "mode": "read", "prompt": "Analyze."})
 
     result = run_next_queue_task(gateway_config, queue=queue, runner=FakeRunner())
 
@@ -142,6 +142,7 @@ def test_run_next_queue_task_delivers_feishu_result_when_target_exists(
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue(
         {
+            "runner": "codex",
             "repo": "example-repo",
             "mode": "read",
             "prompt": "Analyze.",
@@ -181,6 +182,7 @@ def test_run_next_queue_task_updates_saved_card_to_running_and_done(
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue(
         {
+            "runner": "codex",
             "repo": "example-repo",
             "mode": "read",
             "prompt": "Analyze.",
@@ -212,8 +214,8 @@ def test_run_next_queue_task_updates_saved_card_to_running_and_done(
     assert result["status"] == "DONE"
     assert result["delivery_result"]["method"] == "card_update"
     assert [call["card"]["header"]["title"]["content"] for call in updates] == [
-        "Codex task running",
-        "Codex task done",
+        "Agent task running",
+        "Agent task done",
     ]
     assert len(queue.get(queued["task_id"])["card_updates"]) == 2
 
@@ -228,6 +230,7 @@ def test_approved_write_queue_task_runs_in_worktree_with_verify_and_keeps_main_r
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue(
         {
+            "runner": "codex",
             "repo": "example-repo",
             "mode": "write",
             "workspace_id": "write-smoke",
@@ -263,7 +266,7 @@ def test_approved_write_queue_task_runs_in_worktree_with_verify_and_keeps_main_r
     assert not (repo / "generated.txt").exists()
     assert (artifact_dir / "verify_results.json").exists()
     assert "generated.txt" in (artifact_dir / "after_status.txt").read_text(encoding="utf-8")
-    assert (artifact_dir / "codex_stdout.jsonl").exists()
+    assert (artifact_dir / "agent_stdout.jsonl").exists()
     assert _git(repo, "status", "--short").stdout == ""
 
 
@@ -277,6 +280,7 @@ def test_approved_write_queue_task_fails_on_changes_outside_allowlist(
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue(
         {
+            "runner": "codex",
             "repo": "example-repo",
             "mode": "write",
             "workspace_id": "write-smoke",
@@ -303,7 +307,7 @@ def test_approved_write_queue_task_fails_on_changes_outside_allowlist(
 
 
 def test_ensure_worker_cron_job_creates_real_cron_prompt_when_missing(tmp_path: Path) -> None:
-    from hermes_local_agent_gateway.scheduler import WORKER_PROMPT_VERSION
+    from hermes_agent_gateway.scheduler import WORKER_PROMPT_VERSION
 
     calls = []
 
@@ -315,7 +319,7 @@ def test_ensure_worker_cron_job_creates_real_cron_prompt_when_missing(tmp_path: 
 
     result = ensure_worker_cron_job(
         cron_api=fake_cron,
-        name="codex-queue-worker",
+        name="agent-queue-worker",
         schedule="every 1m",
         scripts_dir=tmp_path / "scripts",
     )
@@ -324,12 +328,12 @@ def test_ensure_worker_cron_job_creates_real_cron_prompt_when_missing(tmp_path: 
     assert result["job_id"] == "job-1"
     create_call = calls[1]
     assert create_call["action"] == "create"
-    assert create_call["name"] == "codex-queue-worker"
+    assert create_call["name"] == "agent-queue-worker"
     assert create_call["schedule"] == "every 1m"
-    assert create_call["enabled_toolsets"] == ["hermes_local_agent_gateway"]
-    assert create_call["script"] == "codex_queue_worker_wake.py"
+    assert create_call["enabled_toolsets"] == ["hermes_agent_gateway"]
+    assert create_call["script"] == "agent_queue_worker_wake.py"
     assert create_call["prompt"].startswith(f"[{WORKER_PROMPT_VERSION}]")
-    assert "run_next_codex_task" in create_call["prompt"]
+    assert "run_next_agent_task" in create_call["prompt"]
     assert "final result" in create_call["prompt"]
 
 
@@ -342,7 +346,7 @@ def test_ensure_worker_cron_job_reuses_existing_job_by_name(tmp_path: Path) -> N
             return json.dumps(
                 {
                     "success": True,
-                    "jobs": [{"id": "job-existing", "name": "codex-queue-worker"}],
+                    "jobs": [{"id": "job-existing", "name": "agent-queue-worker"}],
                 }
             )
         assert kwargs["action"] == "update"
@@ -350,7 +354,7 @@ def test_ensure_worker_cron_job_reuses_existing_job_by_name(tmp_path: Path) -> N
 
     result = ensure_worker_cron_job(
         cron_api=fake_cron,
-        name="codex-queue-worker",
+        name="agent-queue-worker",
         schedule="every 1m",
         scripts_dir=tmp_path / "scripts",
     )
@@ -359,13 +363,13 @@ def test_ensure_worker_cron_job_reuses_existing_job_by_name(tmp_path: Path) -> N
         "created": False,
         "updated": True,
         "job_id": "job-existing",
-        "name": "codex-queue-worker",
+        "name": "agent-queue-worker",
     }
-    assert calls[1]["script"] == "codex_queue_worker_wake.py"
+    assert calls[1]["script"] == "agent_queue_worker_wake.py"
 
 
 def test_ensure_worker_cron_job_reuses_formatted_cron_listing(tmp_path: Path) -> None:
-    from hermes_local_agent_gateway.scheduler import DEFAULT_WORKER_PROMPT, WORKER_PROMPT_VERSION
+    from hermes_agent_gateway.scheduler import DEFAULT_WORKER_PROMPT, WORKER_PROMPT_VERSION
 
     calls = []
     prompt_preview = DEFAULT_WORKER_PROMPT[:100] + "..."
@@ -380,10 +384,10 @@ def test_ensure_worker_cron_job_reuses_formatted_cron_listing(tmp_path: Path) ->
                     "jobs": [
                         {
                             "job_id": "job-existing",
-                            "name": "codex-queue-worker",
+                            "name": "agent-queue-worker",
                             "prompt_preview": prompt_preview,
-                            "script": "codex_queue_worker_wake.py",
-                            "enabled_toolsets": ["hermes_local_agent_gateway"],
+                            "script": "agent_queue_worker_wake.py",
+                            "enabled_toolsets": ["hermes_agent_gateway"],
                         }
                     ],
                 }
@@ -392,7 +396,7 @@ def test_ensure_worker_cron_job_reuses_formatted_cron_listing(tmp_path: Path) ->
 
     result = ensure_worker_cron_job(
         cron_api=fake_cron,
-        name="codex-queue-worker",
+        name="agent-queue-worker",
         schedule="every 1m",
         scripts_dir=tmp_path / "scripts",
     )
@@ -401,7 +405,7 @@ def test_ensure_worker_cron_job_reuses_formatted_cron_listing(tmp_path: Path) ->
         "created": False,
         "updated": False,
         "job_id": "job-existing",
-        "name": "codex-queue-worker",
+        "name": "agent-queue-worker",
     }
     assert len(calls) == 1
 
@@ -418,10 +422,10 @@ def test_ensure_worker_cron_job_updates_stale_prompt_version_preview(tmp_path: P
                     "jobs": [
                         {
                             "job_id": "job-existing",
-                            "name": "codex-queue-worker",
+                            "name": "agent-queue-worker",
                             "prompt_preview": "[gateway-worker-prompt:oldhash]\nUse the Hermes tool...",
-                            "script": "codex_queue_worker_wake.py",
-                            "enabled_toolsets": ["hermes_local_agent_gateway"],
+                            "script": "agent_queue_worker_wake.py",
+                            "enabled_toolsets": ["hermes_agent_gateway"],
                         }
                     ],
                 }
@@ -431,7 +435,7 @@ def test_ensure_worker_cron_job_updates_stale_prompt_version_preview(tmp_path: P
 
     result = ensure_worker_cron_job(
         cron_api=fake_cron,
-        name="codex-queue-worker",
+        name="agent-queue-worker",
         schedule="every 1m",
         scripts_dir=tmp_path / "scripts",
     )
@@ -452,10 +456,10 @@ def test_ensure_worker_cron_job_updates_stale_prompt(tmp_path: Path) -> None:
                     "jobs": [
                         {
                             "id": "job-existing",
-                            "name": "codex-queue-worker",
-                            "prompt": "Use run_next_codex_task once.",
-                            "script": "codex_queue_worker_wake.py",
-                            "enabled_toolsets": ["hermes_local_agent_gateway"],
+                            "name": "agent-queue-worker",
+                            "prompt": "Use run_next_agent_task once.",
+                            "script": "agent_queue_worker_wake.py",
+                            "enabled_toolsets": ["hermes_agent_gateway"],
                         }
                     ],
                 }
@@ -465,7 +469,7 @@ def test_ensure_worker_cron_job_updates_stale_prompt(tmp_path: Path) -> None:
 
     result = ensure_worker_cron_job(
         cron_api=fake_cron,
-        name="codex-queue-worker",
+        name="agent-queue-worker",
         schedule="every 1m",
         scripts_dir=tmp_path / "scripts",
     )
@@ -478,7 +482,7 @@ def test_ensure_worker_cron_job_updates_stale_prompt(tmp_path: Path) -> None:
 def test_ensure_worker_wake_script_writes_queue_gate(tmp_path: Path) -> None:
     script = ensure_worker_wake_script(tmp_path / "scripts")
 
-    assert script.name == "codex_queue_worker_wake.py"
+    assert script.name == "agent_queue_worker_wake.py"
     content = script.read_text(encoding="utf-8")
     assert "wakeAgent" in content
     assert "QUEUED" in content

@@ -7,7 +7,7 @@ from .config import GatewayConfig
 
 
 class PolicyError(ValueError):
-    """Raised when a requested Codex task violates gateway policy."""
+    """Raised when a requested Agent task violates gateway policy."""
 
 
 SENSITIVE_PATTERNS = (".env", "*.key", "*secret*", "auth.json", "credentials*")

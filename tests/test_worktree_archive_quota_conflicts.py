@@ -1,7 +1,7 @@
 import tarfile
 from pathlib import Path
 
-from hermes_local_agent_gateway.worktree import (
+from hermes_agent_gateway.worktree import (
     WorktreeError,
     archive_workspace,
     inspect_workspace_conflicts,

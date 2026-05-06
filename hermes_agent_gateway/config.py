@@ -18,7 +18,7 @@ class GatewayConfig:
     worktree_archive_root: Path | None = None
     max_workspaces: int = 20
     max_worktree_bytes: int = 5 * 1024 * 1024 * 1024
-    worker_cron_name: str = "codex-queue-worker"
+    worker_cron_name: str = "agent-queue-worker"
     worker_cron_schedule: str = "every 1m"
     codex_env: dict[str, str] | None = None
     max_output_bytes: int = 10 * 1024 * 1024

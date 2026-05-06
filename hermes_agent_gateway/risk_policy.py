@@ -18,7 +18,7 @@ _GOVERNANCE_PATH_PATTERN = re.compile(
     r"\.omx(?:/|$)|"
     r"\.hermes(?:/|$)|"
     r"hermes-agent(?:/|$)|"
-    r"hermes-codex-gateway(?:/|$)"
+    r"hermes-agent-gateway(?:/|$)"
     r")"
 )
 

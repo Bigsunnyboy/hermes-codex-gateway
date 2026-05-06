@@ -50,7 +50,7 @@ fi
 docker run "${docker_args[@]}" "$IMAGE" \
   plugins list | tee "$workdir/plugins-list.txt"
 
-grep -q "hermes-codex-gateway" "$workdir/plugins-list.txt"
+grep -q "hermes-agent-gateway" "$workdir/plugins-list.txt"
 grep -qi "enabled" "$workdir/plugins-list.txt"
 
 docker run "${docker_args[@]}" "$IMAGE" \
@@ -62,17 +62,20 @@ from tools.registry import registry
 
 discover_plugins(force=True)
 manager = get_plugin_manager()
-plugin = manager._plugins.get("hermes-codex-gateway")
+plugin = manager._plugins.get("hermes-agent-gateway")
 assert plugin is not None, "plugin was not discovered"
 assert plugin.enabled, f"plugin not enabled: {plugin.error!r}"
 assert plugin.error is None, plugin.error
 
 expected_tools = {
-    "submit_codex_command",
-    "run_next_codex_task",
-    "get_codex_task_status",
-    "approve_codex_task",
-    "manage_codex_workspace",
+    "create_agent_task",
+    "submit_agent_command",
+    "run_next_agent_task",
+    "deliver_agent_task_result",
+    "ensure_agent_worker_cron",
+    "get_agent_task_status",
+    "approve_agent_task",
+    "manage_agent_workspace",
 }
 registered = set(plugin.tools_registered)
 missing = expected_tools - registered

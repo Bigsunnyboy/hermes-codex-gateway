@@ -3,12 +3,12 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
-from hermes_local_agent_gateway.config import GatewayConfig
-from hermes_local_agent_gateway.feishu_router import (
+from hermes_agent_gateway.config import GatewayConfig
+from hermes_agent_gateway.feishu_router import (
     build_card_action_callback_response,
     handle_pre_gateway_dispatch,
 )
-from hermes_local_agent_gateway.queue import FileTaskQueue
+from hermes_agent_gateway.queue import FileTaskQueue
 
 
 class FakeAdapter:
@@ -56,7 +56,7 @@ class PlatformKey:
 
 
 def _config_with_approval_policy(*, users=None, chats=None) -> GatewayConfig:
-    root = Path("/tmp/hermes-codex-gateway-test")
+    root = Path("/tmp/hermes-agent-gateway-test")
     return GatewayConfig(
         workspace_roots=[root],
         repo_aliases={},
@@ -68,7 +68,7 @@ def _config_with_approval_policy(*, users=None, chats=None) -> GatewayConfig:
     )
 
 
-def test_pre_gateway_dispatch_ignores_non_codex_messages(tmp_path) -> None:
+def test_pre_gateway_dispatch_ignores_non_agent_messages(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     event = SimpleNamespace(text="hello", source=SimpleNamespace(platform="feishu", chat_id="chat-1"))
 
@@ -77,12 +77,24 @@ def test_pre_gateway_dispatch_ignores_non_codex_messages(tmp_path) -> None:
     assert result == {"action": "allow"}
 
 
-def test_pre_gateway_dispatch_enqueues_codex_command_and_sends_ack(tmp_path) -> None:
+def test_pre_gateway_dispatch_ignores_agent_prefix_that_is_not_command(tmp_path) -> None:
+    queue = FileTaskQueue(tmp_path / "queue")
+    event = SimpleNamespace(
+        text="/agentx runner=codex mode=read\nAnalyze.",
+        source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
+    )
+
+    result = handle_pre_gateway_dispatch(event=event, queue=queue)
+
+    assert result == {"action": "allow"}
+
+
+def test_pre_gateway_dispatch_enqueues_agent_command_and_sends_ack(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text="/codex repo=example-repo mode=read\nAnalyze only.",
+        text="/agent runner=codex repo=example-repo mode=read\nAnalyze only.",
         message_id="msg-1",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
@@ -90,7 +102,7 @@ def test_pre_gateway_dispatch_enqueues_codex_command_and_sends_ack(tmp_path) -> 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
     assert result["action"] == "skip"
-    assert result["reason"] == "codex-command-enqueued"
+    assert result["reason"] == "agent-command-enqueued"
     assert result["task_id"].startswith("queued_")
     payload = queue.get(result["task_id"])["payload"]
     assert payload["prompt"] == "Analyze only."
@@ -110,7 +122,7 @@ def test_pre_gateway_dispatch_sends_ack_with_platform_enum_adapter_key(tmp_path)
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={PlatformKey(): adapter})
     event = SimpleNamespace(
-        text="/codex repo=example-repo mode=read\nAnalyze only.",
+        text="/agent runner=codex repo=example-repo mode=read\nAnalyze only.",
         message_id="msg-1",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
@@ -124,13 +136,13 @@ def test_pre_gateway_dispatch_sends_ack_with_platform_enum_adapter_key(tmp_path)
     assert result["task_id"] in adapter.sent[0]["content"]
 
 
-def test_pre_gateway_dispatch_approves_codex_task_by_slash_command(tmp_path) -> None:
+def test_pre_gateway_dispatch_approves_agent_task_by_slash_command(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue({"repo": "example-repo", "mode": "write", "prompt": "Fix it."})
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f"/codex approve {queued['task_id']}",
+        text=f"/agent approve {queued['task_id']}",
         message_id="msg-approve",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
@@ -139,7 +151,7 @@ def test_pre_gateway_dispatch_approves_codex_task_by_slash_command(tmp_path) -> 
 
     assert result == {
         "action": "skip",
-        "reason": "codex-task-approved",
+        "reason": "agent-task-approved",
         "task_id": queued["task_id"],
         "status": "QUEUED",
     }
@@ -147,24 +159,24 @@ def test_pre_gateway_dispatch_approves_codex_task_by_slash_command(tmp_path) -> 
     assert queue.get(queued["task_id"])["status"] == "QUEUED"
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
-    assert "Codex task approved" in adapter.sent[0]["content"]
+    assert "Agent task approved" in adapter.sent[0]["content"]
     assert queued["task_id"] in adapter.sent[0]["content"]
 
 
-def test_pre_gateway_dispatch_approves_codex_task_by_task_option(tmp_path) -> None:
+def test_pre_gateway_dispatch_approves_agent_task_by_task_option(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue({"repo": "example-repo", "mode": "write", "prompt": "Fix it."})
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={PlatformKey(): adapter})
     event = SimpleNamespace(
-        text=f"/codex approve task={queued['task_id']}",
+        text=f"/agent approve task={queued['task_id']}",
         message_id="msg-approve",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
-    assert result["reason"] == "codex-task-approved"
+    assert result["reason"] == "agent-task-approved"
     assert result["status"] == "QUEUED"
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
@@ -176,7 +188,7 @@ def test_pre_gateway_dispatch_sends_approval_card_for_write_task(tmp_path) -> No
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text="/codex repo=example-repo mode=write workspace=fix verify=pytest allow=app/\nFix it.",
+        text="/agent runner=codex repo=example-repo mode=write workspace=fix verify=pytest allow=app/\nFix it.",
         message_id="msg-1",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
@@ -193,26 +205,26 @@ def test_pre_gateway_dispatch_sends_approval_card_for_write_task(tmp_path) -> No
     card = json.loads(adapter.cards[0]["payload"])
     actions = card["elements"][-1]["actions"]
     values = [action["value"] for action in actions]
-    assert values[0]["hermes_codex_action"] == "approve"
-    assert values[1]["hermes_codex_action"] == "reject"
+    assert values[0]["hermes_agent_action"] == "approve"
+    assert values[1]["hermes_agent_action"] == "reject"
     assert values[0]["task_id"] == result["task_id"]
     assert not adapter.sent
 
 
-def test_pre_gateway_dispatch_approves_codex_task_by_card_action(tmp_path) -> None:
+def test_pre_gateway_dispatch_approves_agent_task_by_card_action(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue({"repo": "example-repo", "mode": "write", "prompt": "Fix it."})
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f'/card button {{"hermes_codex_action":"approve","task_id":"{queued["task_id"]}"}}',
+        text=f'/card button {{"hermes_agent_action":"approve","task_id":"{queued["task_id"]}"}}',
         message_id="card-token",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1", user_id="ou_user"),
     )
 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
-    assert result["reason"] == "codex-task-approved"
+    assert result["reason"] == "agent-task-approved"
     assert queue.get(queued["task_id"])["status"] == "QUEUED"
 
 
@@ -222,7 +234,7 @@ def test_pre_gateway_dispatch_denies_unauthorized_approval_user(tmp_path) -> Non
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f"/codex approve {queued['task_id']}",
+        text=f"/agent approve {queued['task_id']}",
         message_id="msg-approve",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1", user_id="ou_intruder"),
     )
@@ -234,7 +246,7 @@ def test_pre_gateway_dispatch_denies_unauthorized_approval_user(tmp_path) -> Non
         cfg=_config_with_approval_policy(users=["ou_allowed"]),
     )
 
-    assert result["reason"] == "codex-approve-unauthorized"
+    assert result["reason"] == "agent-approve-unauthorized"
     assert result["status"] == "UNAUTHORIZED"
     assert queue.get(queued["task_id"])["status"] == "APPROVAL_REQUIRED"
     loop = asyncio.get_event_loop()
@@ -248,7 +260,7 @@ def test_pre_gateway_dispatch_denies_approval_from_unapproved_chat(tmp_path) -> 
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f"/codex approve {queued['task_id']}",
+        text=f"/agent approve {queued['task_id']}",
         message_id="msg-approve",
         source=SimpleNamespace(platform="feishu", chat_id="chat-denied", user_id="ou_allowed"),
     )
@@ -260,7 +272,7 @@ def test_pre_gateway_dispatch_denies_approval_from_unapproved_chat(tmp_path) -> 
         cfg=_config_with_approval_policy(users=["ou_allowed"], chats=["chat-allowed"]),
     )
 
-    assert result["reason"] == "codex-approve-unauthorized"
+    assert result["reason"] == "agent-approve-unauthorized"
     assert queue.get(queued["task_id"])["status"] == "APPROVAL_REQUIRED"
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
@@ -288,7 +300,7 @@ def test_pre_gateway_dispatch_updates_approval_card_with_resolved_user_name(tmp_
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f'/card button {{"hermes_codex_action":"approve","task_id":"{queued["task_id"]}"}}',
+        text=f'/card button {{"hermes_agent_action":"approve","task_id":"{queued["task_id"]}"}}',
         message_id="card-token",
         source=SimpleNamespace(
             platform="feishu",
@@ -300,7 +312,7 @@ def test_pre_gateway_dispatch_updates_approval_card_with_resolved_user_name(tmp_
 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
-    assert result["reason"] == "codex-task-approved"
+    assert result["reason"] == "agent-task-approved"
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
     assert adapter.card_edits[0]["message_id"] == "msg-card"
@@ -309,20 +321,20 @@ def test_pre_gateway_dispatch_updates_approval_card_with_resolved_user_name(tmp_
     assert "ou_user" not in content
 
 
-def test_pre_gateway_dispatch_rejects_codex_task_by_card_action(tmp_path) -> None:
+def test_pre_gateway_dispatch_rejects_agent_task_by_card_action(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue({"repo": "example-repo", "mode": "write", "prompt": "Fix it."})
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f'/card button {{"hermes_codex_action":"reject","task_id":"{queued["task_id"]}"}}',
+        text=f'/card button {{"hermes_agent_action":"reject","task_id":"{queued["task_id"]}"}}',
         message_id="card-token",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1", user_id="ou_user"),
     )
 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
-    assert result["reason"] == "codex-task-rejected"
+    assert result["reason"] == "agent-task-rejected"
     record = queue.get(queued["task_id"])
     assert record["status"] == "REJECTED"
     assert record["approval"]["rejected_by"] == "ou_user"
@@ -330,21 +342,21 @@ def test_pre_gateway_dispatch_rejects_codex_task_by_card_action(tmp_path) -> Non
 
 def test_card_action_callback_response_builds_approved_inline_card() -> None:
     result = build_card_action_callback_response(
-        action_value={"hermes_codex_action": "approve", "task_id": "queued_1"},
+        action_value={"hermes_agent_action": "approve", "task_id": "queued_1"},
         operator_name="Alice",
     )
 
     assert result is not None
     card = result["card"]
     assert card["header"]["template"] == "green"
-    assert card["header"]["title"]["content"] == "Codex task approved"
+    assert card["header"]["title"]["content"] == "Agent task approved"
     assert "queued_1" in card["elements"][0]["content"]
     assert "Alice" in card["elements"][0]["content"]
 
 
 def test_card_action_callback_response_omits_raw_open_id_operator() -> None:
     result = build_card_action_callback_response(
-        action_value={"hermes_codex_action": "approve", "task_id": "queued_1"},
+        action_value={"hermes_agent_action": "approve", "task_id": "queued_1"},
         operator_name="ou_d3fc36251810ed3c449f5187f488c801",
     )
 
@@ -354,27 +366,27 @@ def test_card_action_callback_response_omits_raw_open_id_operator() -> None:
 
 def test_card_action_callback_response_builds_unauthorized_inline_card() -> None:
     result = build_card_action_callback_response(
-        action_value={"hermes_codex_action": "approve", "task_id": "queued_1"},
+        action_value={"hermes_agent_action": "approve", "task_id": "queued_1"},
         operator_name="Alice",
         authorization_error="operator is not in approval_allowed_user_ids",
     )
 
     assert result is not None
     card = result["card"]
-    assert card["header"]["title"]["content"] == "Codex approval denied"
+    assert card["header"]["title"]["content"] == "Agent approval denied"
     assert "UNAUTHORIZED" in card["elements"][0]["content"]
     assert "Alice" in card["elements"][0]["content"]
 
 
 def test_card_action_callback_response_builds_rejected_inline_card() -> None:
     result = build_card_action_callback_response(
-        action_value={"hermes_codex_action": "reject", "task_id": "queued_2"},
+        action_value={"hermes_agent_action": "reject", "task_id": "queued_2"},
     )
 
     assert result is not None
     card = result["card"]
     assert card["header"]["template"] == "red"
-    assert card["header"]["title"]["content"] == "Codex task rejected"
+    assert card["header"]["title"]["content"] == "Agent task rejected"
     assert "REJECTED" in card["elements"][0]["content"]
 
 
@@ -382,22 +394,22 @@ def test_card_action_callback_response_ignores_unrelated_actions() -> None:
     assert build_card_action_callback_response(action_value={"custom": "value"}) is None
 
 
-def test_pre_gateway_dispatch_reports_codex_task_status(tmp_path) -> None:
+def test_pre_gateway_dispatch_reports_agent_task_status(tmp_path) -> None:
     queue = FileTaskQueue(tmp_path / "queue")
     queued = queue.enqueue({"repo": "example-repo", "mode": "write", "prompt": "Fix it."})
     adapter = FakeAdapter()
     gateway = SimpleNamespace(adapters={"feishu": adapter})
     event = SimpleNamespace(
-        text=f"/codex status {queued['task_id']}",
+        text=f"/agent status {queued['task_id']}",
         message_id="msg-status",
         source=SimpleNamespace(platform="feishu", chat_id="chat-1"),
     )
 
     result = handle_pre_gateway_dispatch(event=event, gateway=gateway, queue=queue)
 
-    assert result["reason"] == "codex-task-status"
+    assert result["reason"] == "agent-task-status"
     assert result["status"] == "APPROVAL_REQUIRED"
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.sleep(0))
-    assert "Codex task status" in adapter.sent[0]["content"]
+    assert "Agent task status" in adapter.sent[0]["content"]
     assert "APPROVAL_REQUIRED" in adapter.sent[0]["content"]

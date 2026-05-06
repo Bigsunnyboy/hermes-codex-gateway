@@ -4,7 +4,7 @@ import asyncio
 import json
 from typing import Any
 
-from .command_parser import parse_codex_command
+from .command_parser import parse_agent_command
 from .config import GatewayConfig
 from .delivery import delivery_target_from_event
 from .queue import FileTaskQueue
@@ -20,7 +20,7 @@ def build_card_action_callback_response(
 ) -> dict[str, Any] | None:
     if not isinstance(action_value, dict):
         return None
-    action = str(action_value.get("hermes_codex_action") or "").strip().lower()
+    action = str(action_value.get("hermes_agent_action") or "").strip().lower()
     if action == "deny":
         action = "reject"
     if action not in {"approve", "reject"}:
@@ -53,7 +53,7 @@ def handle_pre_gateway_dispatch(
     cfg: GatewayConfig | None = None,
 ) -> dict[str, Any]:
     text = str(getattr(event, "text", "") or "").strip()
-    if not (text.startswith("/codex") or text.startswith("/card")):
+    if not (_matches_command(text, "/agent") or _matches_command(text, "/card")):
         return {"action": "allow"}
 
     source = getattr(event, "source", None)
@@ -72,7 +72,7 @@ def handle_pre_gateway_dispatch(
             cfg=cfg,
         )
 
-    parsed = parse_codex_command(text)
+    parsed = parse_agent_command(text)
     verify_commands = expand_verify_templates(parsed.verify_commands)
     payload = parsed.to_task_payload()
     payload["verify_commands"] = verify_commands
@@ -89,7 +89,7 @@ def handle_pre_gateway_dispatch(
     _send_ack(gateway=gateway, event=event, platform=platform, queued=queued, queue=queue)
     return {
         "action": "skip",
-        "reason": "codex-command-enqueued",
+        "reason": "agent-command-enqueued",
         "task_id": queued["task_id"],
         "status": queued["status"],
     }
@@ -100,7 +100,7 @@ def _parse_control_command(text: str) -> dict[str, str] | None:
 
     first_line = text.strip().splitlines()[0].strip()
     tokens = shlex.split(first_line)
-    if len(tokens) < 2 or tokens[0] != "/codex":
+    if len(tokens) < 2 or tokens[0] != "/agent":
         return None
     action = tokens[1].lower()
     if action == "deny":
@@ -121,6 +121,11 @@ def _parse_control_command(text: str) -> dict[str, str] | None:
     return {"action": action, "task_id": task_id}
 
 
+def _matches_command(text: str, command: str) -> bool:
+    first_line = text.strip().splitlines()[0].strip()
+    return first_line == command or first_line.startswith(command + " ")
+
+
 def _parse_card_control_command(text: str) -> dict[str, str] | None:
     first_line = text.strip().splitlines()[0].strip()
     if not first_line.startswith("/card "):
@@ -134,7 +139,7 @@ def _parse_card_control_command(text: str) -> dict[str, str] | None:
         return None
     if not isinstance(value, dict):
         return None
-    action = str(value.get("hermes_codex_action") or "").strip().lower()
+    action = str(value.get("hermes_agent_action") or "").strip().lower()
     if action == "deny":
         action = "reject"
     if action not in {"approve", "reject", "status"}:
@@ -155,9 +160,9 @@ def _handle_control_command(
     action = command["action"]
     task_id = command["task_id"]
     if not task_id:
-        message = f"Codex {action} failed: task id is required.\nUsage: /codex {action} queued_..."
+        message = f"Agent {action} failed: task id is required.\nUsage: /agent {action} queued_..."
         _send_text(gateway=gateway, event=event, platform=platform, content=message)
-        return {"action": "skip", "reason": f"codex-{action}-missing-task-id", "status": "ERROR"}
+        return {"action": "skip", "reason": f"agent-{action}-missing-task-id", "status": "ERROR"}
 
     try:
         if action == "approve":
@@ -187,28 +192,28 @@ def _handle_control_command(
         else:
             record = queue.get(task_id)
     except Exception as exc:
-        message = f"Codex {action} failed: {type(exc).__name__}: {exc}"
+        message = f"Agent {action} failed: {type(exc).__name__}: {exc}"
         _send_text(gateway=gateway, event=event, platform=platform, content=message)
         return {
             "action": "skip",
-            "reason": f"codex-{action}-failed",
+            "reason": f"agent-{action}-failed",
             "task_id": task_id,
             "status": "ERROR",
         }
 
     if action == "approve":
         content = (
-            f"Codex task approved: {record['task_id']}\n"
+            f"Agent task approved: {record['task_id']}\n"
             f"Status: {record['status']}\n"
             "The background worker will run it on the next scheduler tick."
         )
-        reason = "codex-task-approved"
+        reason = "agent-task-approved"
     elif action == "reject":
-        content = f"Codex task rejected: {record['task_id']}\nStatus: {record['status']}"
-        reason = "codex-task-rejected"
+        content = f"Agent task rejected: {record['task_id']}\nStatus: {record['status']}"
+        reason = "agent-task-rejected"
     else:
-        content = f"Codex task status: {record['task_id']}\nStatus: {record['status']}"
-        reason = "codex-task-status"
+        content = f"Agent task status: {record['task_id']}\nStatus: {record['status']}"
+        reason = "agent-task-status"
     if action in {"approve", "reject"}:
         _update_approval_card_state(
             gateway=gateway,
@@ -235,11 +240,11 @@ def _deny_approval_action(
     event: Any,
     platform: str,
 ) -> dict[str, Any]:
-    content = f"Codex {action} denied: {task_id}\nReason: {error}"
+    content = f"Agent {action} denied: {task_id}\nReason: {error}"
     _send_text(gateway=gateway, event=event, platform=platform, content=content)
     return {
         "action": "skip",
-        "reason": f"codex-{action}-unauthorized",
+        "reason": f"agent-{action}-unauthorized",
         "task_id": task_id,
         "status": "UNAUTHORIZED",
     }
@@ -277,7 +282,7 @@ def _send_ack(
     ):
         return
     content = (
-        f"Codex task queued: {queued['task_id']}\n"
+        f"Agent task queued: {queued['task_id']}\n"
         f"Status: {queued['status']}\n"
         f"Risk: {risk.get('level', 'unknown')}"
     )
@@ -307,8 +312,8 @@ def _send_approval_card(
         card=card,
         reply_to=getattr(event, "message_id", None),
         metadata={
-            "handled_by": "hermes-codex-gateway",
-            "codex_queue_task_id": str(queued["task_id"]),
+            "handled_by": "hermes-agent-gateway",
+            "agent_queue_task_id": str(queued["task_id"]),
         },
         queue=queue,
         task_id=str(queued["task_id"]),
@@ -349,7 +354,7 @@ async def _send_interactive_card(
                 "chat_id": chat_id,
                 "message_id": message_id,
                 "reply_to": reply_to,
-                "kind": "codex_write_approval",
+                "kind": "agent_write_approval",
             },
         )
 
@@ -366,7 +371,7 @@ def _build_approval_card(queued: dict[str, Any]) -> dict[str, Any]:
         "config": {"wide_screen_mode": True},
         "header": {
             "template": "orange",
-            "title": {"tag": "plain_text", "content": "Codex write approval required"},
+            "title": {"tag": "plain_text", "content": "Agent write approval required"},
         },
         "elements": [
             {
@@ -389,13 +394,13 @@ def _build_approval_card(queued: dict[str, Any]) -> dict[str, Any]:
                         "tag": "button",
                         "text": {"tag": "plain_text", "content": "批准执行"},
                         "type": "primary",
-                        "value": {"hermes_codex_action": "approve", "task_id": task_id},
+                        "value": {"hermes_agent_action": "approve", "task_id": task_id},
                     },
                     {
                         "tag": "button",
                         "text": {"tag": "plain_text", "content": "拒绝"},
                         "type": "danger",
-                        "value": {"hermes_codex_action": "reject", "task_id": task_id},
+                        "value": {"hermes_agent_action": "reject", "task_id": task_id},
                     },
                 ],
             },
@@ -405,7 +410,7 @@ def _build_approval_card(queued: dict[str, Any]) -> dict[str, Any]:
 
 def _build_resolved_approval_card(*, action: str, task_id: str, operator_name: str | None = None) -> dict[str, Any]:
     approved = action == "approve"
-    title = "Codex task approved" if approved else "Codex task rejected"
+    title = "Agent task approved" if approved else "Agent task rejected"
     status = "QUEUED" if approved else "REJECTED"
     lines = [
         f"**Task:** `{task_id}`",
@@ -444,7 +449,7 @@ def _build_approval_denied_card(*, task_id: str, operator_name: str | None, reas
         "config": {"wide_screen_mode": True},
         "header": {
             "template": "red",
-            "title": {"tag": "plain_text", "content": "Codex approval denied"},
+            "title": {"tag": "plain_text", "content": "Agent approval denied"},
         },
         "elements": [
             {
@@ -470,7 +475,7 @@ def _send_text(*, gateway: Any, event: Any, platform: str, content: str) -> None
         chat_id,
         content,
         reply_to=getattr(event, "message_id", None),
-        metadata={"handled_by": "hermes-codex-gateway"},
+        metadata={"handled_by": "hermes-agent-gateway"},
     )
     try:
         loop = asyncio.get_running_loop()

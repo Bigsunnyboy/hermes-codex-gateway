@@ -8,21 +8,21 @@ from typing import Any, Callable
 from .config import GatewayConfig
 from .delivery import CardUpdater, deliver_task_result, AdapterSender, update_task_lifecycle_card
 from .queue import FileTaskQueue
-from .runner import CodexCliRunner
-from .task_service import Runner, create_codex_task
+from .runners.codex import CodexCliRunner
+from .task_service import Runner, create_agent_task
 
 
 _WORKER_PROMPT_BODY = (
-    "Use the Hermes tool run_next_codex_task exactly once; it runs one queued task and "
+    "Use the Hermes tool run_next_agent_task exactly once; it runs one queued task and "
     "auto-delivers the final result to the original Feishu chat when a delivery target exists. "
-    "If it returns EMPTY, reply briefly that the Codex queue is empty. "
-    "Do not use terminal or spawn Codex directly."
+    "If it returns EMPTY, reply briefly that the agent queue is empty. "
+    "Do not use terminal or spawn the runner directly."
 )
 _WORKER_PROMPT_HASH = hashlib.sha256(_WORKER_PROMPT_BODY.encode("utf-8")).hexdigest()[:12]
 WORKER_PROMPT_VERSION = f"gateway-worker-prompt:{_WORKER_PROMPT_HASH}"
 DEFAULT_WORKER_PROMPT = f"[{WORKER_PROMPT_VERSION}]\n{_WORKER_PROMPT_BODY}"
 
-WAKE_SCRIPT_NAME = "codex_queue_worker_wake.py"
+WAKE_SCRIPT_NAME = "agent_queue_worker_wake.py"
 WAKE_SCRIPT = '''from __future__ import annotations
 
 import json
@@ -71,15 +71,16 @@ def run_next_queue_task(
             extra_env=cfg.codex_env or {},
             max_output_bytes=cfg.max_output_bytes,
         )
-        result = create_codex_task(
+        result = create_agent_task(
             cfg,
             runner=actual_runner,
+            runner_name=str(payload.get("runner") or ""),
             repo=payload.get("repo"),
             path=payload.get("path"),
             mode=str(payload.get("mode") or "read"),
             prompt=str(payload.get("prompt") or ""),
             workspace_id=payload.get("workspace_id"),
-            codex_session_id=payload.get("codex_session_id"),
+            agent_session_id=payload.get("agent_session_id"),
             approved=bool(payload.get("approved", False)),
             verify_commands=list(payload.get("verify_commands") or []),
             allowed_paths=list(payload.get("allowed_paths") or []),
@@ -137,9 +138,7 @@ def ensure_worker_cron_job(
             if (
                 not _job_prompt_matches(job)
                 or job.get("script") != WAKE_SCRIPT_NAME
-                or job.get("enabled_toolsets") != [
-                    "hermes_local_agent_gateway"
-                ]
+                or job.get("enabled_toolsets") != ["hermes_agent_gateway"]
             ):
                 _decode(
                     api(
@@ -147,7 +146,7 @@ def ensure_worker_cron_job(
                         job_id=job_id,
                         prompt=DEFAULT_WORKER_PROMPT,
                         script=WAKE_SCRIPT_NAME,
-                        enabled_toolsets=["hermes_local_agent_gateway"],
+                        enabled_toolsets=["hermes_agent_gateway"],
                     )
                 )
                 return {
@@ -170,7 +169,7 @@ def ensure_worker_cron_job(
             schedule=schedule,
             prompt=DEFAULT_WORKER_PROMPT,
             script=WAKE_SCRIPT_NAME,
-            enabled_toolsets=["hermes_local_agent_gateway"],
+            enabled_toolsets=["hermes_agent_gateway"],
         )
     )
     return {

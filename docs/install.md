@@ -1,13 +1,13 @@
 # Installation
 
-Hermes Codex Gateway is designed to be installed as a user plugin, outside the
+Hermes Agent Gateway is designed to be installed as a user plugin, outside the
 Hermes Agent source tree.
 
 ## Install
 
 ```bash
-hermes plugins install <owner>/hermes-codex-gateway
-hermes plugins enable hermes-codex-gateway
+hermes plugins install <owner>/hermes-agent-gateway
+hermes plugins enable hermes-agent-gateway
 ```
 
 Restart the gateway after installation:
@@ -24,14 +24,14 @@ system-level unit instead of a user unit.
 Copy the example configuration:
 
 ```bash
-cp ~/.hermes/plugins/hermes-codex-gateway/config.example.json \
-  ~/.hermes/plugins/hermes-codex-gateway/config.json
+cp ~/.hermes/plugins/hermes-agent-gateway/config.example.json \
+  ~/.hermes/plugins/hermes-agent-gateway/config.json
 ```
 
 Edit these fields first:
 
 - `workspace_roots`: parent directories that may contain repositories.
-- `repo_aliases`: friendly aliases accepted by `/codex repo=...`.
+- `repo_aliases`: friendly aliases accepted by `/agent runner=codex repo=...`.
 - `approval_allowed_user_ids`: Feishu users allowed to approve write tasks.
 - `approval_allowed_chat_ids`: Feishu chats allowed to trigger write tasks.
 

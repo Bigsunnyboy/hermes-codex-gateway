@@ -1,7 +1,7 @@
 # Demo Script
 
 This short script is meant for a 60-90 second screen recording or live demo.
-It shows the plugin as a governed chat-to-Codex workflow, not as a raw remote
+It shows the plugin as a governed chat-to-agent workflow, not as a raw remote
 shell.
 
 ## Setup Shot
@@ -10,7 +10,7 @@ Show the repository and the installed plugin:
 
 ```bash
 hermes plugins list
-hermes plugins enable hermes-codex-gateway
+hermes plugins enable hermes-agent-gateway
 ```
 
 Show the non-secret config fields that matter:
@@ -26,7 +26,7 @@ Show the non-secret config fields that matter:
 }
 ```
 
-Do not show API keys, Feishu secrets, Codex auth files, or private project
+Do not show API keys, Feishu secrets, runner auth files, or private project
 credentials.
 
 ## Read-Only Flow
@@ -34,7 +34,7 @@ credentials.
 In Feishu/Lark, send:
 
 ```text
-/codex repo=demo mode=read workspace=demo-read-001
+/agent runner=codex repo=demo mode=read workspace=demo-read-001
 Summarize this repository structure and identify the test command. Do not modify files.
 ```
 
@@ -48,7 +48,7 @@ because it is sandboxed for analysis, and the result comes back to the same chat
 Show:
 
 - The queued task.
-- The Codex run.
+- The agent run.
 - The returned summary or result card.
 
 ## Approved Write Flow
@@ -56,14 +56,14 @@ Show:
 In Feishu/Lark, send:
 
 ```text
-/codex repo=demo mode=write workspace=demo-docs-001 verify=file:docs/demo-note.md allow=docs/demo-note.md
+/agent runner=codex repo=demo mode=write workspace=demo-docs-001 verify=file:docs/demo-note.md allow=docs/demo-note.md
 Create docs/demo-note.md with a short note explaining that the demo write path works.
 ```
 
 Narration:
 
 ```text
-Write mode requires approval. The task also has an allowlist, so Codex may only
+Write mode requires approval. The task also has an allowlist, so the selected runner may only
 change docs/demo-note.md, and verify runs before success is reported.
 ```
 
@@ -81,7 +81,7 @@ End with the control model:
 
 ```text
 The important part is the boundary: Feishu starts the workflow, Hermes owns the
-plugin and wake gate, Codex works in an isolated worktree, and success requires
+plugin and wake gate, the selected runner works in an isolated worktree, and success requires
 the configured policy plus verification.
 ```
 

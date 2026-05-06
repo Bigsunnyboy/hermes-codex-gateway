@@ -1,4 +1,4 @@
-# Hermes Codex Gateway Operations
+# Hermes Agent Gateway Operations
 
 This file is for operators running the gateway in a real Hermes installation.
 
@@ -7,7 +7,7 @@ This file is for operators running the gateway in a real Hermes installation.
 The plugin should live in the Hermes user plugin directory:
 
 ```text
-~/.hermes/plugins/hermes-codex-gateway
+~/.hermes/plugins/hermes-agent-gateway
 ```
 
 It should not be copied into a Hermes source checkout's bundled plugin
@@ -21,7 +21,7 @@ Runtime state belongs outside this repository:
 ~/.hermes/worktrees
 ~/.hermes/worktree_archives
 ~/.hermes/agent_sessions
-~/.hermes/codex_home
+~/.hermes/agent_home
 ```
 
 Never commit those directories.
@@ -29,8 +29,8 @@ Never commit those directories.
 ## Install Or Update
 
 ```bash
-hermes plugins install <owner>/hermes-codex-gateway
-hermes plugins enable hermes-codex-gateway
+hermes plugins install <owner>/hermes-agent-gateway
+hermes plugins enable hermes-agent-gateway
 systemctl restart hermes-gateway.service
 ```
 
@@ -42,10 +42,10 @@ config. Preserve any existing runtime `config.json`.
 Run once after install:
 
 ```text
-ensure_codex_worker_cron
+ensure_agent_worker_cron
 ```
 
-The created cron job uses `~/.hermes/scripts/codex_queue_worker_wake.py`.
+The created cron job uses `~/.hermes/scripts/agent_queue_worker_wake.py`.
 Empty queues return `{"wakeAgent": false}` and Hermes skips the agent run.
 Non-empty queues wake the plugin tool path so the live Feishu adapter can update
 RUNNING/DONE/FAILED lifecycle cards.
@@ -59,7 +59,7 @@ shortened `prompt_preview`.
 Use a disposable git repository first:
 
 ```text
-/codex path=/home/projects/example mode=write workspace=publish-smoke-001 verify=file:publish-smoke.txt allow=publish-smoke.txt
+/agent runner=codex path=/home/projects/example mode=write workspace=publish-smoke-001 verify=file:publish-smoke.txt allow=publish-smoke.txt
 Create publish-smoke.txt with the exact text: publish smoke ok. Do not modify any other file.
 ```
 
@@ -72,9 +72,9 @@ Expected result:
 
 ## Troubleshooting
 
-- No response to `/codex`: confirm the plugin is enabled and the gateway was restarted.
-- Queue does not drain: run `ensure_codex_worker_cron` and inspect `~/.hermes/agent_queue`.
-- Codex cannot reach the API: configure non-secret proxy variables in `codex_env`.
+- No response to `/agent`: confirm the plugin is enabled and the gateway was restarted.
+- Queue does not drain: run `ensure_agent_worker_cron` and inspect `~/.hermes/agent_queue`.
+- Runner cannot reach the API: configure non-secret proxy variables in `codex_env`.
 - Card update unavailable: text approval and final delivery should still work if the Hermes Feishu adapter lacks card update hooks.
 - Unexpected write failure: inspect task artifact `after_status.txt` and compare with the `allow=...` list.
 

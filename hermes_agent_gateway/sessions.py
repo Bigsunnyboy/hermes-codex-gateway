@@ -22,11 +22,11 @@ def save_workspace_session(
     session_root: Path,
     *,
     workspace_id: str | None,
-    codex_session_id: str | None,
+    agent_session_id: str | None,
     project_path: Path,
     execution_path: Path,
 ) -> None:
-    if not workspace_id or not codex_session_id:
+    if not workspace_id or not agent_session_id:
         return
     path = _session_path(session_root, workspace_id)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -34,7 +34,7 @@ def save_workspace_session(
         path,
         {
             "workspace_id": workspace_id,
-            "codex_session_id": codex_session_id,
+            "agent_session_id": agent_session_id,
             "project_path": str(project_path),
             "execution_path": str(execution_path),
             "updated_at": datetime.now(timezone.utc).isoformat(),
