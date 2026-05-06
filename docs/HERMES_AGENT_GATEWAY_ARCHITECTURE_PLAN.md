@@ -438,7 +438,7 @@ Deferred:
 - Signed agent card.
 - Extended auth.
 
-Do not describe the project as full A2A Protocol compatible until the adapter is
+Do not describe the project as protocol-compatible until the adapter is
 implemented and verified.
 
 ## Security Model
