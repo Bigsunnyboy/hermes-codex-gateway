@@ -412,7 +412,18 @@ Approval and status:
 A2A should be implemented as an adapter after the gateway core and command/task
 contracts stabilize.
 
-Minimum A2A adapter target:
+Current next A2A-facing target:
+
+- define the internal gateway descriptor a future AgentCard generator would
+  consume;
+- define A2A-message-to-gateway-task intake mapping;
+- define gateway task status, artifact, approval, and audit views for a future
+  adapter;
+- keep all transport bindings, routes, SDK dependencies, and compatibility
+  claims out of this phase.
+
+Later endpoint implementation candidates, after the internal contract is tested
+and a binding/version/auth plan is approved:
 
 - `GET /.well-known/agent-card.json`
 - `POST /message:send`
@@ -542,14 +553,18 @@ Acceptance:
 
 Goal:
 
-- Add A2A ingress after the core model stabilizes.
-- Implement task create/status/artifact retrieval only.
+- Add A2A-facing internal contract mapping after the core model stabilizes.
+- Define descriptor, message intake, task view, artifact view, approval/risk
+  view, and audit view before transport work.
 
 Acceptance:
 
-- A2A adapter does not depend on Feishu.
-- A2A status maps to `TaskStatus`.
-- No streaming claim yet.
+- A2A-facing mapping does not depend on Feishu/Lark internals.
+- A2A-facing capabilities derive only from enabled runner registry and gateway
+  policy.
+- Gateway status, approval, risk, verification, and artifacts have explicit
+  internal mapping semantics.
+- No endpoint, SDK dependency, streaming, subscribe, or compatibility claim yet.
 
 ### Phase 5: Additional Runners
 
