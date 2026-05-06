@@ -419,6 +419,8 @@ Current next A2A-facing target:
 - define A2A-message-to-gateway-task intake mapping;
 - define gateway task status, artifact, approval, and audit views for a future
   adapter;
+- connect those internal views to real queue records, `task.json`, and
+  allowlisted artifact previews;
 - keep all transport bindings, routes, SDK dependencies, and compatibility
   claims out of this phase.
 
@@ -556,6 +558,9 @@ Goal:
 - Add A2A-facing internal contract mapping after the core model stabilizes.
 - Define descriptor, message intake, task view, artifact view, approval/risk
   view, and audit view before transport work.
+- Connect internal views to real `FileTaskQueue` records and gateway-owned
+  artifact files with fixed-basename reads, containment checks, preview limits,
+  and recursive sanitization.
 
 Acceptance:
 
@@ -564,6 +569,9 @@ Acceptance:
   policy.
 - Gateway status, approval, risk, verification, and artifacts have explicit
   internal mapping semantics.
+- Queue `task_id` remains task-facing identity; execution ids remain metadata.
+- Artifact previews are bounded and cannot escape the resolved artifact
+  directory.
 - No endpoint, SDK dependency, streaming, subscribe, or compatibility claim yet.
 
 ### Phase 5: Additional Runners

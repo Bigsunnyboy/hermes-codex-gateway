@@ -31,6 +31,11 @@ runner-specific invocation flags.
 
 ## Contract Surfaces To Define
 
+The first mapping-only slice is implemented in
+`hermes_agent_gateway/a2a_gateway_contract.py`. The next internal slice connects
+that contract to real `FileTaskQueue` records, `task.json`, and bounded
+artifact previews. Both slices remain internal contract plumbing only.
+
 ### Gateway Agent Descriptor
 
 Purpose:
@@ -170,13 +175,15 @@ They must not:
 
 ## Implementation Handoff
 
-When this plan is approved for execution, use a narrow implementation slice:
+The mapping-only slice has already been implemented. The next execution handoff
+is the larger real-record/artifact projection batch:
 
-1. Add mapping-only internal models/helpers under a gateway-owned module.
-2. Add unit tests for descriptor, message intake validation, task state mapping,
-   artifact sanitization, and event vocabulary.
-3. Update docs to reference the internal contract.
-4. Do not add transport routes, server registration, public schemas, or SDK
+1. Build sanitized internal task views from queue records.
+2. Read `task.json` and allowlisted artifact files into bounded previews.
+3. Preserve queue `task_id` and queue `status` as authoritative.
+4. Keep execution ids, artifact paths, runner command paths, and raw filesystem
+   paths sanitized as metadata.
+5. Do not add transport routes, server registration, public schemas, or SDK
    dependencies.
 
 ## Verification Expectations
@@ -194,7 +201,7 @@ When this plan is approved for execution, use a narrow implementation slice:
 ## Superseded Wording
 
 Older architecture notes used endpoint names as a minimum A2A adapter target.
-This plan narrows the next phase: define the internal mapping contract first.
-Endpoint names remain protocol research references only until a later endpoint
-implementation plan selects a binding, version, auth model, and conformance
-test path.
+This plan narrows the next phases: define the internal mapping contract first,
+then connect it to real queue/task/artifact records. Endpoint names remain
+protocol research references only until a later endpoint implementation plan
+selects a binding, version, auth model, and conformance test path.

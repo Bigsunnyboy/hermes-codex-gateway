@@ -7,6 +7,7 @@ PUBLIC_DOCS = [
     ROOT / "README.md",
     ROOT / "OPERATIONS.md",
     ROOT / "docs" / "A2A_FACING_GATEWAY_CONTRACT_PLAN.md",
+    ROOT / "docs" / "A2A_REAL_TASK_ARTIFACT_VIEWS_PLAN.md",
     ROOT / "docs" / "HERMES_AGENT_GATEWAY_ARCHITECTURE_PLAN.md",
 ]
 
@@ -23,6 +24,10 @@ def test_a2a_contract_module_does_not_add_endpoint_or_transport_tokens() -> None
         "push" + "NotificationConfig",
         "agent/get" + "AuthenticatedExtendedCard",
         "text/event-" + "stream",
+        "Fast" + "API",
+        "Flask",
+        "API" + "Router",
+        "route" + "(",
     ]
 
     for path in IMPLEMENTATION_FILES:
@@ -38,6 +43,10 @@ def test_public_docs_do_not_claim_protocol_compatibility() -> None:
         "supports " + "A2A",
         "full " + "A2A",
         "A2A " + "server",
+        "serves " + "A2A",
+        "exposes " + "A2A",
+        "implements " + "A2A",
+        "A2A " + "support",
     ]
 
     for path in PUBLIC_DOCS:

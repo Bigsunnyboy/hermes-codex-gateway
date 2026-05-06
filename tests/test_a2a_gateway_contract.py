@@ -1,9 +1,15 @@
+import json
+import os
 import pytest
+
+from pathlib import Path
 
 from hermes_agent_gateway.a2a_gateway_contract import (
     EVENT_SEMANTICS,
+    artifact_manifest,
     artifact_views,
     build_gateway_agent_descriptor,
+    gateway_task_record_view,
     gateway_message_payload,
     gateway_task_state_view,
     normalize_message_envelope,
@@ -184,3 +190,167 @@ def test_event_semantics_are_inert_planning_vocabulary() -> None:
         "task_completed",
         "task_failed",
     )
+
+
+def test_queue_record_view_preserves_queue_identity_and_status_precedence(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "task.json").write_text(
+        json.dumps(
+            {
+                "task_id": "agent_1",
+                "status": "DONE",
+                "project_path": "/home/projects/repo",
+                "prompt": "Inspect",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    record = {
+        "task_id": "queued_1",
+        "status": "FAILED",
+        "created_at": "2026-05-06T00:00:00Z",
+        "updated_at": "2026-05-06T00:01:00Z",
+        "payload": {"runner": "codex", "mode": "read", "prompt": "Inspect"},
+        "result": {
+            "success": False,
+            "status": "DONE",
+            "task_id": "agent_1",
+            "artifact_dir": str(artifact_dir),
+            "error": "failed at /home/projects/repo/app.py",
+        },
+    }
+
+    view = gateway_task_record_view(record)
+
+    assert view["task_id"] == "queued_1"
+    assert view["execution_task_id"] == "agent_1"
+    assert view["state"]["state"] == "failed"
+    assert view["status"] == "FAILED"
+    assert "result.status differs from queue status" in view["mismatches"]
+    assert "task_record.status differs from queue status" in view["mismatches"]
+    assert view["payload"]["prompt"]["content"] == "Inspect"
+    assert view["result"]["error"]["content"] == "failed at <redacted-path>"
+    assert view["artifacts"]["items"]["task_record"]["payload"]["task_id"] == "agent_1"
+    assert view["artifacts"]["items"]["task_record"]["payload"]["project_path"] == "<redacted-path>"
+
+
+def test_queue_done_remains_completed_when_artifact_status_disagrees(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "task.json").write_text(
+        json.dumps({"task_id": "agent_1", "status": "FAILED"}) + "\n",
+        encoding="utf-8",
+    )
+
+    view = gateway_task_record_view(
+        {
+            "task_id": "queued_1",
+            "status": "DONE",
+            "payload": {"mode": "read"},
+            "result": {"success": False, "task_id": "agent_1", "artifact_dir": str(artifact_dir)},
+        }
+    )
+
+    assert view["state"]["state"] == "completed"
+    assert view["execution_task_id"] == "agent_1"
+    assert "task_record.status differs from queue status" in view["mismatches"]
+
+
+def test_artifact_manifest_reads_allowlisted_files_with_preview_metadata(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    artifact_dir.mkdir(parents=True)
+    large_stdout = "x" * (16 * 1024 + 20)
+    large_diff = "d" * (64 * 1024 + 20)
+    (artifact_dir / "agent_stdout.jsonl").write_text(large_stdout, encoding="utf-8")
+    (artifact_dir / "agent_stderr.log").write_text("error at /tmp/repo/file.py", encoding="utf-8")
+    (artifact_dir / "after_diff.txt").write_text(large_diff, encoding="utf-8")
+    (artifact_dir / "ignored.txt").write_text("not included", encoding="utf-8")
+
+    manifest = artifact_manifest(artifact_dir)
+
+    assert set(manifest["items"]) == {"stdout", "stderr", "after_diff"}
+    assert manifest["items"]["stdout"]["truncated"] is True
+    assert manifest["items"]["stdout"]["bytes_read"] == 16 * 1024
+    assert manifest["items"]["stdout"]["limit_bytes"] == 16 * 1024
+    assert manifest["items"]["stderr"]["content"] == "error at <redacted-path>"
+    assert manifest["items"]["after_diff"]["truncated"] is True
+    assert manifest["items"]["after_diff"]["bytes_read"] == 64 * 1024
+    assert "ignored" not in manifest["items"]
+
+
+def test_artifact_manifest_omits_symlink_escape(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    outside = tmp_path / "outside.log"
+    artifact_dir.mkdir(parents=True)
+    outside.write_text("secret", encoding="utf-8")
+    os.symlink(outside, artifact_dir / "agent_stdout.jsonl")
+
+    manifest = artifact_manifest(artifact_dir)
+
+    assert "stdout" not in manifest["items"]
+
+
+def test_artifact_manifest_handles_invalid_json_without_crashing(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    artifact_dir.mkdir(parents=True)
+    (artifact_dir / "task.json").write_text("{not json /home/projects/repo", encoding="utf-8")
+    (artifact_dir / "verify_results.json").write_text("{not json /tmp/verify", encoding="utf-8")
+
+    manifest = artifact_manifest(artifact_dir)
+
+    assert manifest["items"]["task_record_error"]["payload"]["error"] == "invalid json"
+    assert manifest["items"]["task_record_error"]["payload"]["path"] == "<redacted-path>"
+    assert manifest["items"]["verification_error"]["payload"]["error"] == "invalid json"
+
+
+def test_verify_logs_are_read_only_from_fixed_contained_basenames(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifacts" / "agent_1"
+    artifact_dir.mkdir(parents=True)
+    external_stdout = tmp_path / "external" / "verify_1_stdout.log"
+    external_stdout.parent.mkdir()
+    external_stdout.write_text("external secret", encoding="utf-8")
+    (artifact_dir / "verify_1_stdout.log").write_text("local stdout /home/projects/repo", encoding="utf-8")
+    (artifact_dir / "verify_1_stderr.log").write_text("local stderr", encoding="utf-8")
+    (artifact_dir / "verify_2_stdout.log").write_text("unreferenced", encoding="utf-8")
+    (artifact_dir / "verify_results.json").write_text(
+        json.dumps(
+            [
+                {
+                    "command": "test -f generated.txt",
+                    "returncode": 0,
+                    "stdout": str(external_stdout),
+                    "stderr": "/outside/verify_1_stderr.log",
+                }
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    manifest = artifact_manifest(artifact_dir)
+    verification = manifest["items"]["verification"]["payload"]
+
+    assert verification["results"][0]["stdout"] == "<redacted-path>"
+    assert verification["results"][0]["stderr"] == "<redacted-path>"
+    assert verification["logs"][0]["stdout"]["content"] == "local stdout <redacted-path>"
+    assert verification["logs"][0]["stderr"]["content"] == "local stderr"
+    assert "verify_2_stdout" not in str(verification)
+
+
+def test_prompt_and_error_previews_are_bounded() -> None:
+    long_prompt = "p" * (8 * 1024 + 10)
+    view = gateway_task_record_view(
+        {
+            "task_id": "queued_1",
+            "status": "FAILED",
+            "payload": {"prompt": long_prompt},
+            "result": {"success": False, "error": "e" * (8 * 1024 + 10)},
+        }
+    )
+
+    assert view["payload"]["prompt"]["truncated"] is True
+    assert view["payload"]["prompt"]["bytes_read"] == 8 * 1024
+    assert view["result"]["error"]["truncated"] is True
+    assert view["result"]["error"]["limit_bytes"] == 8 * 1024
