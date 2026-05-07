@@ -103,10 +103,12 @@ Planning artifacts:
 Implement a single internal service boundary with a narrow API. Exact names can be adjusted to fit local style, but the boundary should make these responsibilities explicit:
 
 - descriptor projection: current `build_gateway_agent_descriptor` behavior.
-- message/envelope normalization: current `normalize_message_envelope` and `gateway_message_payload` behavior.
+- message/envelope normalization: current `normalize_message_envelope` and `gateway_message_payload` payload behavior, with actor-source validation split by layer.
+  The canonical service accepts neutral adapter actor sources; the A2A compatibility facade preserves the current `source == "a2a"` validation.
 - task lifecycle projection: current `gateway_task_state_view` and queue-status precedence behavior.
 - task record projection: current `gateway_task_record_view` behavior.
 - artifact projection: current `artifact_manifest`, `artifact_views`, and sanitization behavior.
+  `task_record_view(record)` is the adapter-facing entrypoint; direct `artifact_manifest(path)` remains service-internal/testable projection plumbing so future adapters do not read artifact directories directly.
 
 Recommended low-churn shape:
 
@@ -114,10 +116,11 @@ Recommended low-churn shape:
 AdapterProjectionService
   .gateway_descriptor()
   .normalize_message_envelope(payload)
+  .normalize_adapter_message_envelope(payload, *, actor_source=None)
   .message_payload(envelope)
   .task_state(record)
   .task_record_view(record)
-  .artifact_manifest(artifact_dir)
+  .artifact_manifest(artifact_dir)  # internal/testable projection plumbing
   .artifact_views(record)
   .sanitize_task_record(record)
 ```
@@ -127,6 +130,7 @@ The module may also export dataclasses/types currently in `a2a_gateway_contract.
 Compatibility facade:
 - Keep existing helper function names in `a2a_gateway_contract.py`.
 - Each helper delegates to a default service instance or function in the new service module.
+- The facade keeps A2A-specific actor-source validation so current A2A-facing tests and semantics stay intact while the canonical service remains adapter-neutral.
 - Mark the facade as internal A2A-facing compatibility in docs/comments without claiming public API stability.
 
 ### Implementation Steps For Ralph
@@ -144,10 +148,13 @@ Compatibility facade:
    - Provide a default service instance or factory if that matches local style.
    - Keep queue access out of the service unless it is injected as records; the service should project mappings/paths, not own queue persistence.
    - Do not add list/get endpoint semantics. If a helper accepts records, it projects them only.
+   - Treat artifact-directory reads as an implementation detail behind task record projection; do not document direct artifact-dir access as a future adapter dependency.
 
 4. Strengthen static gates.
    - Scan the new module and old facade for endpoint/transport tokens.
-   - Keep compatibility-claim checks across public docs.
+   - Split static verification into implementation bans and documentation posture bans:
+     implementation files may ban endpoint, transport, SDK, streaming, subscribe, push, route, and AgentCard-serving tokens;
+     public docs should ban compatibility/support/server/serving claims, but may mention endpoints, AgentCard, streaming, or subscribe as explicit non-goals or deferred follow-ups.
    - Add assertions that future adapters should not import queue/artifact internals directly when tests can enforce this cheaply without brittle repo-wide import bans.
 
 5. Update docs.
@@ -167,8 +174,8 @@ Compatibility facade:
 - Tests prove the canonical service returns the same descriptor/envelope/task/artifact shapes currently covered by `tests/test_a2a_gateway_contract.py`.
 - Tests prove queue `task_id` and queue `status` remain task-facing/lifecycle-authoritative when execution artifacts disagree.
 - Tests prove artifact reads remain fixed-basename, contained, bounded, sanitized, and symlink-escape resistant.
-- Static tests cover the new service module and old facade for endpoint/transport/SDK/streaming/subscribe/AgentCard-serving tokens.
-- Public docs do not claim A2A compatibility, A2A support, A2A server behavior, endpoint serving, or AgentCard exposure.
+- Static tests cover the new service module and old facade for endpoint/transport/SDK/streaming/subscribe/push/AgentCard-serving tokens.
+- Public docs do not claim A2A compatibility, A2A support, A2A server behavior, endpoint serving, or AgentCard exposure; docs may still use those terms only as explicit non-goals or deferred work.
 - No endpoint files, transport routes, A2A SDK dependency, streaming/subscription behavior, task-listing endpoint semantics, or compatibility claims are added.
 
 ## Verification Commands
@@ -180,12 +187,13 @@ uv run pytest tests/test_adapter_projection_service.py tests/test_a2a_gateway_co
 uv run pytest tests/test_queue.py tests/test_task_service.py tests/test_scheduler_integration.py
 uv run pytest
 python -m compileall hermes_agent_gateway tests
-rg -n "message:send|message/send|message:stream|message/stream|text/event-stream|pushNotificationConfig|agent/getAuthenticatedExtendedCard|AgentCard|A2A-compatible|a2a-compatible|supports A2A|full A2A|A2A server|serves A2A|exposes A2A|implements A2A|A2A support|FastAPI|Flask|APIRouter|route\\(" hermes_agent_gateway tests docs
+rg -n "message:send|message/send|message:stream|message/stream|text/event-stream|pushNotificationConfig|agent/getAuthenticatedExtendedCard|AgentCard|FastAPI|Flask|APIRouter|route\\(" hermes_agent_gateway tests
+rg -n "A2A-compatible|a2a-compatible|supports A2A|full A2A|A2A server|serves A2A|exposes A2A|implements A2A|A2A support" README.md OPERATIONS.md docs skills __init__.py hermes_agent_gateway tests
 ```
 
 Expected grep behavior:
-- The command may print only intentionally forbidden-token test fixtures if the static test stores split tokens to avoid literal matches.
-- It must not find forbidden tokens in implementation or public compatibility claims in docs.
+- The implementation grep must not find endpoint/transport/SDK/streaming/AgentCard-serving tokens outside intentionally split static-test fixtures.
+- The documentation/public-surface grep must not find compatibility/support/server claims. It must not fail on docs that mention endpoints, AgentCard, streaming, or subscribe only as explicit non-goals or deferred work.
 
 ## Non-Goals
 
@@ -201,7 +209,9 @@ Expected grep behavior:
 ## Risks And Mitigations
 
 - Risk: The new service becomes a broad adapter framework.
-  Mitigation: Keep it projection-only; it accepts records/payloads/artifact dirs and returns internal views.
+  Mitigation: Keep it projection-only; it accepts records/payloads and returns internal views. Artifact-dir reads remain internal plumbing behind task-record projection, not an adapter contract.
+- Risk: The canonical service bakes A2A-only actor semantics into future adapter APIs.
+  Mitigation: Make actor-source handling neutral in the service and keep A2A-specific `source == "a2a"` validation in the compatibility facade.
 - Risk: Compatibility wrappers hide duplicate ownership.
   Mitigation: Make wrappers one-line delegates and make canonical tests import the new service.
 - Risk: A module rename breaks existing A2A-facing tests without improving behavior.

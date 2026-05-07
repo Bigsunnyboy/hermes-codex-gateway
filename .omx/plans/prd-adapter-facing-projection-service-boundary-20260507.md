@@ -18,28 +18,34 @@ Implement or extract:
 ## Functional Requirements
 
 - The service exposes descriptor projection equivalent to current `build_gateway_agent_descriptor`.
-- The service exposes message envelope normalization and payload projection equivalent to current `normalize_message_envelope` and `gateway_message_payload`.
+- The service exposes message envelope normalization and payload projection equivalent to current `normalize_message_envelope` and `gateway_message_payload`, except actor-source validation is neutral at the canonical service layer.
+- The A2A-facing compatibility facade preserves current `actor.source == "a2a"` validation while delegating projection behavior to the service.
 - The service exposes task lifecycle projection equivalent to current `gateway_task_state_view`, including future-binding flags for approval/rejected/blocked states.
 - The service exposes task record projection equivalent to current `gateway_task_record_view`.
-- The service exposes artifact projection equivalent to current `artifact_manifest` and `artifact_views`.
+- The service exposes task-record projection as the future adapter-facing entrypoint.
+- The service keeps artifact manifest projection equivalent to current `artifact_manifest` as internal/testable plumbing behind task-record views; future adapters should not depend directly on artifact directory reads.
+- The service exposes artifact category projection equivalent to current `artifact_views`.
 - The service exposes sanitization equivalent to current `sanitize_task_record`.
 - Existing A2A-facing helper names continue to work by delegating to the service.
 
 ## Boundary Requirements
 
 - The service is projection-only and transport-neutral.
-- The service accepts mappings and artifact paths; it does not own queue persistence, scheduling, delivery, route registration, or network serving.
+- The service accepts mappings and returns sanitized adapter-facing views; it does not own queue persistence, scheduling, delivery, route registration, or network serving.
+- Direct artifact path reads remain internal service plumbing for composing task-record views and tests, not a future adapter dependency.
 - Queue `task_id` remains the task-facing identity.
 - Queue `status` remains lifecycle-authoritative when result or artifact metadata disagrees.
 - Execution task ids remain metadata only.
 - Artifact reads remain fixed-basename, contained, bounded, sanitized, and symlink-escape resistant.
 - Static gates cover both the new service and compatibility facade.
+- Static gates split implementation-token bans from documentation-claim bans so non-goal/deferred-work wording remains allowed while compatibility claims remain forbidden.
 
 ## Documentation Requirements
 
 - Docs say future adapters depend on the adapter-facing projection service.
 - Docs may say A2A is a future adapter consumer direction.
 - Docs must not claim A2A compatibility, A2A support, endpoint serving, AgentCard serving, streaming, subscribe, or SDK integration.
+- Docs may mention endpoints, AgentCard, streaming, or subscribe only as explicit non-goals or deferred follow-ups.
 
 ## Non-Goals
 
