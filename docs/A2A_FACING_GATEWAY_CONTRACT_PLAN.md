@@ -29,12 +29,30 @@ runner-specific invocation flags.
 - Artifact truth comes from the artifact directory, including stdout, stderr,
   diff, verification results, and `task.json`.
 
+## Canonical Projection Boundary
+
+The implemented adapter-facing projection boundary is
+`hermes_agent_gateway/adapter_projection_service.py`.
+
+Future adapters should depend on this service for descriptor, envelope, task
+state, task record, artifact category, and sanitized view projection. They
+should not read queue files, artifact directories, runner internals, Feishu/Lark
+fields, or scattered A2A helper functions directly.
+
+`hermes_agent_gateway/a2a_gateway_contract.py` remains an internal A2A-facing
+compatibility facade over the service. It keeps A2A-specific actor-source
+validation while the canonical service stays neutral for future adapter
+sources.
+
+`task_record_view(record)` is the adapter-facing entrypoint for task plus
+artifact projection. Direct artifact-directory manifest reads are service
+internal plumbing and test support, not a future adapter dependency.
+
 ## Contract Surfaces To Define
 
-The first mapping-only slice is implemented in
-`hermes_agent_gateway/a2a_gateway_contract.py`. The next internal slice connects
-that contract to real `FileTaskQueue` records, `task.json`, and bounded
-artifact previews. Both slices remain internal contract plumbing only.
+The first mapping-only slice and the real-record/artifact slice are now owned
+by the adapter-facing projection service. Both remain internal contract
+plumbing only.
 
 ### Gateway Agent Descriptor
 
@@ -175,15 +193,17 @@ They must not:
 
 ## Implementation Handoff
 
-The mapping-only slice has already been implemented. The next execution handoff
-is the larger real-record/artifact projection batch:
+The mapping-only and real-record/artifact projection slices have already been
+implemented. The next execution handoff is the service-boundary hardening batch:
 
-1. Build sanitized internal task views from queue records.
-2. Read `task.json` and allowlisted artifact files into bounded previews.
-3. Preserve queue `task_id` and queue `status` as authoritative.
-4. Keep execution ids, artifact paths, runner command paths, and raw filesystem
+1. Keep `adapter_projection_service.py` as the implementation owner.
+2. Keep `a2a_gateway_contract.py` as a thin compatibility facade.
+3. Preserve neutral actor handling in the service and A2A actor validation in
+   the facade.
+4. Preserve queue `task_id` and queue `status` as authoritative.
+5. Keep execution ids, artifact paths, runner command paths, and raw filesystem
    paths sanitized as metadata.
-5. Do not add transport routes, server registration, public schemas, or SDK
+6. Do not add transport routes, server registration, public schemas, or SDK
    dependencies.
 
 ## Verification Expectations

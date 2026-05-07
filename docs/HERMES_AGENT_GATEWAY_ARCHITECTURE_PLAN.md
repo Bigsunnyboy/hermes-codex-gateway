@@ -414,13 +414,14 @@ contracts stabilize.
 
 Current next A2A-facing target:
 
-- define the internal gateway descriptor a future AgentCard generator would
-  consume;
-- define A2A-message-to-gateway-task intake mapping;
-- define gateway task status, artifact, approval, and audit views for a future
-  adapter;
-- connect those internal views to real queue records, `task.json`, and
-  allowlisted artifact previews;
+- keep `hermes_agent_gateway/adapter_projection_service.py` as the canonical
+  internal projection service future adapters depend on;
+- keep `hermes_agent_gateway/a2a_gateway_contract.py` as the A2A-facing
+  compatibility facade over that service;
+- define and maintain descriptor, message/envelope, task status, artifact,
+  approval, and audit projections through the service;
+- keep composed task-record views as the adapter-facing entrypoint, with direct
+  artifact manifest reads limited to service-internal plumbing and tests;
 - keep all transport bindings, routes, SDK dependencies, and compatibility
   claims out of this phase.
 
@@ -555,9 +556,11 @@ Acceptance:
 
 Goal:
 
-- Add A2A-facing internal contract mapping after the core model stabilizes.
+- Maintain the adapter-facing projection service before transport work.
+- Keep A2A as one future adapter consumer of the service, not the service
+  identity.
 - Define descriptor, message intake, task view, artifact view, approval/risk
-  view, and audit view before transport work.
+  view, and audit view through the service.
 - Connect internal views to real `FileTaskQueue` records and gateway-owned
   artifact files with fixed-basename reads, containment checks, preview limits,
   and recursive sanitization.
@@ -567,6 +570,9 @@ Acceptance:
 - A2A-facing mapping does not depend on Feishu/Lark internals.
 - A2A-facing capabilities derive only from enabled runner registry and gateway
   policy.
+- Future adapters depend on `adapter_projection_service.py`, not queue files,
+  artifact directories, runner internals, Feishu/Lark fields, or scattered A2A
+  helpers.
 - Gateway status, approval, risk, verification, and artifacts have explicit
   internal mapping semantics.
 - Queue `task_id` remains task-facing identity; execution ids remain metadata.

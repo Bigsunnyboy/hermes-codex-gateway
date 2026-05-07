@@ -1,21 +1,26 @@
 # A2A Real Task And Artifact Views Plan
 
-This plan is the next larger execution batch after the mapping-only
-A2A-facing contract. It connects that contract to real Gateway Core task
-records and gateway-owned artifact files without adding any A2A endpoint,
-route, SDK, transport binding, streaming behavior, or compatibility claim.
+This plan was the larger execution batch after the mapping-only A2A-facing
+contract. It connected the projection layer to real Gateway Core task records
+and gateway-owned artifact files without adding any A2A endpoint, route, SDK,
+transport binding, streaming behavior, or compatibility claim.
 
 ## Decision
 
-Extend the internal A2A-facing contract so it can build sanitized views from:
+The real-record/artifact projection is now part of the adapter-facing
+projection service. That service can build sanitized views from:
 
 - `FileTaskQueue` records;
 - `task.json` payloads written by `create_agent_task`;
 - gateway-owned artifact files under each task artifact directory.
 
-The implementation should remain an internal read/normalization layer. It must
-not serve protocol objects over the network, register routes, or change queue,
-task execution, approval, verification, delivery, runner, or channel behavior.
+The implementation remains an internal read/normalization layer. It must not
+serve protocol objects over the network, register routes, or change queue, task
+execution, approval, verification, delivery, runner, or channel behavior.
+
+Future adapters should consume the composed task-record view from
+`hermes_agent_gateway/adapter_projection_service.py`. They should not depend on
+artifact directory paths or direct manifest reads.
 
 ## Batch Scope
 
@@ -82,8 +87,9 @@ Add a single internal builder that combines:
 - semantic task state;
 - sanitized task/result/artifact categories.
 
-This builder is the main output for future A2A adapter work. It is still not a
-protocol response and must not use protocol route or endpoint names.
+This builder is the main output for future adapter work, including future A2A
+adapter work. It is still not a protocol response and must not use protocol
+route or endpoint names.
 
 Identity and lifecycle precedence:
 
@@ -124,10 +130,12 @@ adds:
 
 ## Implementation Notes For Ralph
 
-Recommended file ownership:
+Completed ownership and follow-up guidance:
 
-- `hermes_agent_gateway/a2a_gateway_contract.py`: extend the current internal
-  contract with record/artifact builders and bounded read helpers.
+- `hermes_agent_gateway/adapter_projection_service.py`: owns descriptor,
+  envelope, lifecycle, record, artifact, and sanitization projection.
+- `hermes_agent_gateway/a2a_gateway_contract.py`: remains a thin A2A-facing
+  compatibility facade over the projection service.
 - `tests/test_a2a_gateway_contract.py`: add fixture tests for queue/result
   records, artifact directory manifests, missing files, invalid JSON, bounded
   previews, recursive path sanitization, and combined views.
@@ -138,9 +146,8 @@ Recommended file ownership:
 - `docs/HERMES_AGENT_GATEWAY_ARCHITECTURE_PLAN.md`: update Phase 4 acceptance
   so real task/artifact views are the next implemented internal step.
 
-If the implementation becomes too large for one file, a new internal module may
-be added, but it must stay under `hermes_agent_gateway` and must not introduce
-transport dependencies.
+The projection service must stay under `hermes_agent_gateway` and must not
+introduce transport dependencies.
 
 ## Acceptance Criteria
 

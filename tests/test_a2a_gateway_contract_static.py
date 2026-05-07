@@ -2,7 +2,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-IMPLEMENTATION_FILES = [ROOT / "hermes_agent_gateway" / "a2a_gateway_contract.py"]
+IMPLEMENTATION_FILES = [
+    ROOT / "hermes_agent_gateway" / "adapter_projection_service.py",
+    ROOT / "hermes_agent_gateway" / "a2a_gateway_contract.py",
+]
 PUBLIC_DOCS = [
     ROOT / "README.md",
     ROOT / "OPERATIONS.md",
@@ -25,7 +28,7 @@ def test_a2a_contract_module_does_not_add_endpoint_or_transport_tokens() -> None
         "agent/get" + "AuthenticatedExtendedCard",
         "text/event-" + "stream",
         "Fast" + "API",
-        "Flask",
+        "Fla" + "sk",
         "API" + "Router",
         "route" + "(",
     ]
